@@ -35,7 +35,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (pathname === '/login' || pathname.startsWith('/manager')) {
       setLoading(false);
     } else {
-      checkAuth();
+      // Check for native Android auth first
+      checkNativeAuth().then(hasNativeAuth => {
+        if (!hasNativeAuth) {
+          checkAuth();
+        }
+      });
     }
     // Also check for manager token
     const savedManagerToken = localStorage.getItem('manager_token');
@@ -43,6 +48,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setManagerToken(savedManagerToken);
     }
   }, []);
+
+  // Check for native Android app auth (Google Sign-In or API Key mode)
+  const checkNativeAuth = async (): Promise<boolean> => {
+    const isNativeApp = localStorage.getItem('isNativeApp') === 'true';
+    const nativeAuthData = localStorage.getItem('ciris_native_auth');
+    const authMethod = localStorage.getItem('ciris_auth_method');
+    const showSetup = localStorage.getItem('ciris_show_setup') === 'true';
+
+    if (!isNativeApp || !nativeAuthData) {
+      return false;
+    }
+
+    try {
+      const authData = JSON.parse(nativeAuthData);
+      console.log('[AuthContext] Native auth detected - method:', authMethod, 'showSetup:', showSetup);
+
+      // Configure SDK for local on-device API
+      localStorage.setItem('selectedAgentId', 'datum');
+      sdkConfigManager.configure('datum');
+
+      try {
+        // Try to login with default credentials for local on-device API
+        const user = await cirisClient.login('admin', 'ciris_admin_password');
+        const token = cirisClient.auth.getAccessToken();
+        if (token) {
+          sdkConfigManager.configure('datum', token);
+        }
+        setUser(user);
+        console.log('[AuthContext] Native auth login successful');
+        setLoading(false);
+
+        // Redirect to setup wizard if needed
+        if (showSetup) {
+          console.log('[AuthContext] Redirecting to setup wizard');
+          // Store native auth info for setup wizard to use
+          localStorage.setItem('ciris_native_llm_mode', authMethod === 'google' ? 'ciris_proxy' : 'custom');
+          router.push('/setup');
+        }
+
+        return true;
+      } catch (loginError) {
+        console.error('[AuthContext] Native auth login failed:', loginError);
+        // Create a mock user for native app mode if login fails
+        const mockUser: User = {
+          user_id: authData.googleUserId || 'native_user',
+          username: authData.displayName || 'Native User',
+          role: 'ADMIN',
+          api_role: 'ADMIN',
+          permissions: ['read', 'write', 'admin'],
+          created_at: new Date().toISOString(),
+        };
+        setUser(mockUser);
+        setLoading(false);
+
+        // Redirect to setup wizard if needed
+        if (showSetup) {
+          console.log('[AuthContext] Redirecting to setup wizard (mock user)');
+          localStorage.setItem('ciris_native_llm_mode', authMethod === 'google' ? 'ciris_proxy' : 'custom');
+          router.push('/setup');
+        }
+
+        return true;
+      }
+    } catch (error) {
+      console.error('[AuthContext] Failed to parse native auth data:', error);
+      return false;
+    }
+  };
 
   const checkAuth = async () => {
     try {

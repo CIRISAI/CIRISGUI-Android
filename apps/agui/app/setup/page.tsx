@@ -21,6 +21,10 @@ export default function SetupWizard() {
   const [templates, setTemplates] = useState<AgentTemplate[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // Native app mode detection
+  const [isNativeApp, setIsNativeApp] = useState(false);
+  const [nativeLLMMode, setNativeLLMMode] = useState<'ciris_proxy' | 'custom' | null>(null);
+
   // Form state - Primary LLM
   const [selectedProvider, setSelectedProvider] = useState("");
   const [apiKey, setApiKey] = useState("");
@@ -50,6 +54,14 @@ export default function SetupWizard() {
   // Load providers and templates
   useEffect(() => {
     loadProvidersAndTemplates();
+
+    // Check if running in native Android app
+    const nativeApp = localStorage.getItem('isNativeApp') === 'true';
+    const nativeMode = localStorage.getItem('ciris_native_llm_mode');
+    setIsNativeApp(nativeApp);
+    if (nativeMode === 'ciris_proxy' || nativeMode === 'custom') {
+      setNativeLLMMode(nativeMode);
+    }
   }, []);
 
   const loadProvidersAndTemplates = async () => {
@@ -122,22 +134,25 @@ export default function SetupWizard() {
       toast.error("User passwords do not match");
       return;
     }
-    if (!llmValid) {
+    // Skip LLM validation check for ciris_proxy mode
+    if (!llmValid && nativeLLMMode !== 'ciris_proxy') {
       toast.error("Please validate your LLM configuration first");
       return;
     }
 
     setLoading(true);
     try {
+      // For CIRIS proxy mode, use special provider config
+      const isCirisProxy = nativeLLMMode === 'ciris_proxy';
       const config: SetupCompleteRequest = {
-        llm_provider: selectedProvider,
-        llm_api_key: apiKey,
-        llm_base_url: apiBase || null,
-        llm_model: selectedModel || null,
-        // Backup LLM (optional)
-        backup_llm_api_key: enableBackupLLM && backupApiKey ? backupApiKey : null,
-        backup_llm_base_url: enableBackupLLM && backupApiBase ? backupApiBase : null,
-        backup_llm_model: enableBackupLLM && backupModel ? backupModel : null,
+        llm_provider: isCirisProxy ? 'ciris_proxy' : selectedProvider,
+        llm_api_key: isCirisProxy ? '' : apiKey, // No API key for proxy
+        llm_base_url: isCirisProxy ? 'https://llm-proxy.ciris.ai' : (apiBase || null),
+        llm_model: isCirisProxy ? null : (selectedModel || null),
+        // Backup LLM (optional) - not available in proxy mode
+        backup_llm_api_key: !isCirisProxy && enableBackupLLM && backupApiKey ? backupApiKey : null,
+        backup_llm_base_url: !isCirisProxy && enableBackupLLM && backupApiBase ? backupApiBase : null,
+        backup_llm_model: !isCirisProxy && enableBackupLLM && backupModel ? backupModel : null,
         template_id: selectedTemplate || "general",
         enabled_adapters: enabledAdapters,
         adapter_config: adapterConfigs,
@@ -277,7 +292,72 @@ export default function SetupWizard() {
                 connection to make sure everything works.
               </p>
 
-              {/* Provider selection */}
+              {/* Native App LLM Mode Selection */}
+              {isNativeApp && (
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-lg p-5">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">LLM Provider Option</h3>
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => {
+                        setNativeLLMMode('ciris_proxy');
+                        setSelectedProvider('ciris_proxy');
+                        setLlmValid(true); // CIRIS proxy is pre-validated
+                        setApiKey(''); // No API key needed
+                        setApiBase('https://llm-proxy.ciris.ai');
+                        setSelectedModel('');
+                      }}
+                      className={`w-full p-4 border-2 rounded-lg text-left transition-all ${
+                        nativeLLMMode === 'ciris_proxy'
+                          ? "border-indigo-600 bg-white"
+                          : "border-gray-200 bg-white hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-2xl">✨</div>
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900">Use CIRIS LLM Proxy</div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            No API key needed - uses your Google account credits. Fast setup, pay-as-you-go pricing.
+                          </div>
+                        </div>
+                        {nativeLLMMode === 'ciris_proxy' && (
+                          <span className="text-indigo-600 text-xl">✓</span>
+                        )}
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setNativeLLMMode('custom');
+                        setSelectedProvider('');
+                        setLlmValid(false);
+                        setApiBase('');
+                      }}
+                      className={`w-full p-4 border-2 rounded-lg text-left transition-all ${
+                        nativeLLMMode === 'custom'
+                          ? "border-indigo-600 bg-white"
+                          : "border-gray-200 bg-white hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="text-2xl">🔑</div>
+                        <div className="flex-1">
+                          <div className="font-semibold text-gray-900">Use My Own API Key</div>
+                          <div className="text-sm text-gray-600 mt-1">
+                            Bring your own OpenAI, Anthropic, or compatible API key.
+                          </div>
+                        </div>
+                        {nativeLLMMode === 'custom' && (
+                          <span className="text-indigo-600 text-xl">✓</span>
+                        )}
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Provider selection - show for non-native app OR when custom mode selected */}
+              {(!isNativeApp || nativeLLMMode === 'custom') && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Provider</label>
                 <div className="grid grid-cols-2 gap-4">
@@ -300,9 +380,10 @@ export default function SetupWizard() {
                   ))}
                 </div>
               </div>
+              )}
 
-              {/* API Key */}
-              {provider && provider.requires_api_key && (
+              {/* API Key - only show for custom providers */}
+              {nativeLLMMode !== 'ciris_proxy' && provider && provider.requires_api_key && (
                 <div>
                   <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700 mb-2">
                     API Key <span className="text-red-500">*</span>
@@ -322,8 +403,8 @@ export default function SetupWizard() {
                 </div>
               )}
 
-              {/* Model input */}
-              {provider && provider.requires_model && (
+              {/* Model input - only show for custom providers */}
+              {nativeLLMMode !== 'ciris_proxy' && provider && provider.requires_model && (
                 <div>
                   <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-2">
                     Model Name {provider.requires_model && <span className="text-red-500">*</span>}
@@ -347,8 +428,8 @@ export default function SetupWizard() {
                 </div>
               )}
 
-              {/* API Base URL */}
-              {provider && provider.requires_base_url && (
+              {/* API Base URL - only show for custom providers */}
+              {nativeLLMMode !== 'ciris_proxy' && provider && provider.requires_base_url && (
                 <div>
                   <label htmlFor="apiBase" className="block text-sm font-medium text-gray-700 mb-2">
                     API Base URL{" "}
@@ -372,7 +453,8 @@ export default function SetupWizard() {
                 </div>
               )}
 
-              {/* Validation */}
+              {/* Validation - only show for custom providers */}
+              {nativeLLMMode !== 'ciris_proxy' && (
               <div className="flex items-center space-x-4">
                 <button
                   onClick={validateLLM}
@@ -383,8 +465,21 @@ export default function SetupWizard() {
                 </button>
                 {llmValid && <span className="text-green-600 font-medium">✓ Connected</span>}
               </div>
+              )}
 
-              {/* Optional Backup LLM Configuration */}
+              {/* CIRIS Proxy status */}
+              {nativeLLMMode === 'ciris_proxy' && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+                  <span className="text-green-600 text-xl">✓</span>
+                  <div>
+                    <div className="font-medium text-green-900">CIRIS LLM Proxy Ready</div>
+                    <div className="text-sm text-green-700">Your Google account will be used for authentication and billing.</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Optional Backup LLM Configuration - only show when NOT using CIRIS proxy */}
+              {nativeLLMMode !== 'ciris_proxy' && (
               <div className="border-t border-gray-200 pt-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
@@ -455,10 +550,11 @@ export default function SetupWizard() {
                   </div>
                 )}
               </div>
+              )}
 
               <button
                 onClick={() => setCurrentStep("users")}
-                disabled={!llmValid}
+                disabled={!llmValid && nativeLLMMode !== 'ciris_proxy'}
                 className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
               >
                 Continue to User Setup →
