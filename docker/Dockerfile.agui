@@ -1,0 +1,33 @@
+FROM node:20-alpine
+
+# Build arguments
+ARG VERSION
+ARG BUILD_DATE
+ARG VCS_REF
+
+WORKDIR /app
+
+# Copy everything first
+COPY . .
+
+# Install dependencies in the GUI app directory
+WORKDIR /app/apps/agui
+RUN npm install --legacy-peer-deps
+
+# Build the app with version information
+ENV NEXT_PUBLIC_APP_VERSION=${VERSION}
+ENV NEXT_PUBLIC_GIT_HASH=${VCS_REF}
+ENV NEXT_PUBLIC_BUILD_DATE=${BUILD_DATE}
+RUN npm run build
+
+# Runtime
+EXPOSE 3000
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOSTNAME=0.0.0.0
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error()})" || exit 1
+
+CMD ["npm", "run", "start"]

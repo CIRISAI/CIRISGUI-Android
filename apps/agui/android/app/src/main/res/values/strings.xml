@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CIRIS</string>
+    <string name="title_activity_main">CIRIS</string>
+    <string name="package_name">ai.ciris.mobile</string>
+    <string name="custom_url_scheme">ai.ciris.mobile</string>
+    <!-- Google Sign-In Web Client ID -->
+    <string name="server_client_id">265882853697-l421ndojcs5nm7lkln53jj29kf7kck91.apps.googleusercontent.com</string>
+</resources>

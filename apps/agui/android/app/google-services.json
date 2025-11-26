@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "265882853697",
+    "project_id": "ciris-460718",
+    "storage_bucket": "ciris-460718.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:265882853697:android:cirisamobile",
+        "android_client_info": {
+          "package_name": "ai.ciris.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "265882853697-tc8deg0loue7v8gj6chq1aqn8ukmu45q.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "ai.ciris.mobile",
+            "certificate_hash": "dd12fc76e323d20285f49cf8fb85cb7001f5f2ee"
+          }
+        },
+        {
+          "client_id": "265882853697-l421ndojcs5nm7lkln53jj29kf7kck91.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": ""
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "265882853697-l421ndojcs5nm7lkln53jj29kf7kck91.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
