@@ -23,7 +23,9 @@ export default function SetupWizard() {
 
   // Native app mode detection
   const [isNativeApp, setIsNativeApp] = useState(false);
-  const [nativeLLMMode, setNativeLLMMode] = useState<'ciris_proxy' | 'custom' | null>(null);
+  const [isGoogleAuth, setIsGoogleAuth] = useState(false); // Separate from LLM choice
+  const [llmChoice, setLlmChoice] = useState<"ciris_key" | "byok" | null>(null);
+  const [nativeLLMMode, setNativeLLMMode] = useState<"ciris_proxy" | "custom" | null>(null);
 
   // Form state - Primary LLM
   const [selectedProvider, setSelectedProvider] = useState("");
@@ -41,9 +43,18 @@ export default function SetupWizard() {
 
   const [adminPassword, setAdminPassword] = useState("");
   const [adminPasswordConfirm, setAdminPasswordConfirm] = useState("");
+  const [adminPasswordError, setAdminPasswordError] = useState<string | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [userPasswordError, setUserPasswordError] = useState<string | null>(null);
+
+  // Check if user is logged in with Google (affects user account requirements, NOT LLM choice)
+  // Google users don't need a local account, but can still choose BYOK for LLM
+  const showLocalUserFields = !isGoogleAuth;
+
+  // Check if using CIRIS proxy (affects LLM configuration)
+  const useCirisProxy = llmChoice === "ciris_key";
 
   const [selectedTemplate, setSelectedTemplate] = useState("");
 
@@ -51,17 +62,63 @@ export default function SetupWizard() {
   const [enabledAdapters, setEnabledAdapters] = useState<string[]>(["api"]);
   const [adapterConfigs, setAdapterConfigs] = useState<Record<string, Record<string, string>>>({});
 
+  // Helper to read native app state from localStorage
+  const readNativeAppState = () => {
+    const nativeApp = localStorage.getItem("isNativeApp") === "true";
+    const authMethod = localStorage.getItem("ciris_auth_method");
+    const savedLlmChoice = localStorage.getItem("ciris_llm_choice") as "ciris_key" | "byok" | null;
+
+    console.log(
+      "[Setup] Reading native state - isNativeApp:",
+      nativeApp,
+      "authMethod:",
+      authMethod,
+      "savedLlmChoice:",
+      savedLlmChoice
+    );
+
+    setIsNativeApp(nativeApp);
+
+    // Detect Google auth (separate from LLM choice)
+    if (authMethod === "google") {
+      console.log("[Setup] Google auth detected - user can choose CIRIS Key or BYOK");
+      setIsGoogleAuth(true);
+    } else if (authMethod) {
+      console.log("[Setup] Non-Google auth:", authMethod, "- user must use BYOK");
+      setIsGoogleAuth(false);
+      setLlmChoice("byok");
+    }
+
+    // Restore saved LLM choice if available
+    if (savedLlmChoice) {
+      setLlmChoice(savedLlmChoice);
+      setNativeLLMMode(savedLlmChoice === "ciris_key" ? "ciris_proxy" : "custom");
+    }
+  };
+
   // Load providers and templates
   useEffect(() => {
+    // Clear redirect lock and event handler flags - we successfully landed on setup page
+    sessionStorage.removeItem("ciris_redirect_in_progress");
+    sessionStorage.removeItem("ciris_native_auth_event_handled");
+    console.log("[Setup] Cleared redirect lock and event flag - successfully on setup page");
+
     loadProvidersAndTemplates();
 
-    // Check if running in native Android app
-    const nativeApp = localStorage.getItem('isNativeApp') === 'true';
-    const nativeMode = localStorage.getItem('ciris_native_llm_mode');
-    setIsNativeApp(nativeApp);
-    if (nativeMode === 'ciris_proxy' || nativeMode === 'custom') {
-      setNativeLLMMode(nativeMode);
-    }
+    // Read initial native app state
+    readNativeAppState();
+
+    // Listen for native auth injection (happens AFTER page load in WebView)
+    // This handles the race condition where useEffect runs before native injection
+    const handleNativeAuthReady = () => {
+      console.log("[Setup] Native auth ready event received - re-reading state");
+      readNativeAppState();
+    };
+    window.addEventListener("ciris_native_auth_ready", handleNativeAuthReady);
+
+    return () => {
+      window.removeEventListener("ciris_native_auth_ready", handleNativeAuthReady);
+    };
   }, []);
 
   const loadProvidersAndTemplates = async () => {
@@ -126,33 +183,78 @@ export default function SetupWizard() {
   };
 
   const completeSetup = async () => {
+    // Comprehensive debug logging
+    console.log("[Setup] ========== completeSetup called ==========");
+    console.log("[Setup] State values:");
+    console.log("[Setup]   llmChoice:", llmChoice);
+    console.log("[Setup]   useCirisProxy:", useCirisProxy, '(llmChoice === "ciris_key")');
+    console.log("[Setup]   isGoogleAuth:", isGoogleAuth);
+    console.log("[Setup]   isNativeApp:", isNativeApp);
+    console.log("[Setup]   selectedProvider:", selectedProvider);
+    console.log("[Setup]   apiKey:", apiKey ? `${apiKey.substring(0, 10)}...` : "(empty)");
+    console.log("[Setup]   apiBase:", apiBase);
+    console.log("[Setup]   selectedModel:", selectedModel);
+    console.log("[Setup] localStorage values:");
+    console.log("[Setup]   ciris_google_user_id:", localStorage.getItem("ciris_google_user_id"));
+    console.log("[Setup]   ciris_auth_method:", localStorage.getItem("ciris_auth_method"));
+    console.log("[Setup]   ciris_llm_choice:", localStorage.getItem("ciris_llm_choice"));
+    console.log("[Setup]   isNativeApp:", localStorage.getItem("isNativeApp"));
+
     if (adminPassword !== adminPasswordConfirm) {
       toast.error("Admin passwords do not match");
       return;
     }
-    if (password !== passwordConfirm) {
+    // Only validate user passwords if showing local user fields
+    if (showLocalUserFields && password !== passwordConfirm) {
       toast.error("User passwords do not match");
       return;
     }
-    // Skip LLM validation check for ciris_proxy mode
-    if (!llmValid && nativeLLMMode !== 'ciris_proxy') {
+    // Skip LLM validation check for CIRIS Key mode (uses proxy)
+    if (!llmValid && !useCirisProxy) {
       toast.error("Please validate your LLM configuration first");
       return;
     }
 
     setLoading(true);
     try {
-      // For CIRIS proxy mode, use special provider config
-      const isCirisProxy = nativeLLMMode === 'ciris_proxy';
+      // For CIRIS proxy mode (CIRIS Key), use google:{userId} as API key format
+      // The CIRIS LLM proxy at llm.ciris.ai authenticates via Bearer google:{google_user_id}
+      const googleUserId = localStorage.getItem("ciris_google_user_id") || "";
+      const cirisProxyApiKey = googleUserId ? `google:${googleUserId}` : "";
+
+      console.log("[Setup] CIRIS proxy config:");
+      console.log("[Setup]   googleUserId:", googleUserId);
+      console.log("[Setup]   cirisProxyApiKey:", cirisProxyApiKey);
+
+      if (useCirisProxy && !googleUserId) {
+        console.error("[Setup] CIRIS proxy requires Google user ID but none found in localStorage");
+        toast.error("Google user ID not found. Please sign out and sign in again with Google.");
+      }
+
+      // Determine final values based on mode
+      const finalProvider = useCirisProxy ? "openai" : selectedProvider;
+      const finalApiKey = useCirisProxy ? cirisProxyApiKey : apiKey;
+      const finalBaseUrl = useCirisProxy ? "https://llm.ciris.ai/v1" : apiBase || null;
+      const finalModel = useCirisProxy ? "default" : selectedModel || null;
+
+      console.log("[Setup] Final config to send:");
+      console.log("[Setup]   llm_provider:", finalProvider);
+      console.log(
+        "[Setup]   llm_api_key:",
+        finalApiKey ? `${finalApiKey.substring(0, 15)}...` : "(empty)"
+      );
+      console.log("[Setup]   llm_base_url:", finalBaseUrl);
+      console.log("[Setup]   llm_model:", finalModel);
+
       const config: SetupCompleteRequest = {
-        llm_provider: isCirisProxy ? 'ciris_proxy' : selectedProvider,
-        llm_api_key: isCirisProxy ? '' : apiKey, // No API key for proxy
-        llm_base_url: isCirisProxy ? 'https://llm-proxy.ciris.ai' : (apiBase || null),
-        llm_model: isCirisProxy ? null : (selectedModel || null),
-        // Backup LLM (optional) - not available in proxy mode
-        backup_llm_api_key: !isCirisProxy && enableBackupLLM && backupApiKey ? backupApiKey : null,
-        backup_llm_base_url: !isCirisProxy && enableBackupLLM && backupApiBase ? backupApiBase : null,
-        backup_llm_model: !isCirisProxy && enableBackupLLM && backupModel ? backupModel : null,
+        llm_provider: finalProvider,
+        llm_api_key: finalApiKey,
+        llm_base_url: finalBaseUrl,
+        llm_model: finalModel,
+        // Backup LLM (optional) - available for all LLM choices
+        backup_llm_api_key: enableBackupLLM && backupApiKey ? backupApiKey : null,
+        backup_llm_base_url: enableBackupLLM && backupApiBase ? backupApiBase : null,
+        backup_llm_model: enableBackupLLM && backupModel ? backupModel : null,
         template_id: selectedTemplate || "general",
         enabled_adapters: enabledAdapters,
         adapter_config: adapterConfigs,
@@ -163,7 +265,22 @@ export default function SetupWizard() {
       };
 
       const response = await cirisClient.setup.complete(config);
-      console.log("Setup complete:", response.message);
+      console.log("[Setup] Setup API response:", JSON.stringify(response));
+
+      // CRITICAL: Clear the setup flag to prevent redirect loop
+      console.log(
+        "[Setup] BEFORE clearing - ciris_show_setup was:",
+        localStorage.getItem("ciris_show_setup")
+      );
+      localStorage.setItem("ciris_show_setup", "false");
+      localStorage.removeItem("ciris_native_llm_mode");
+      localStorage.removeItem("ciris_llm_choice");
+      console.log(
+        "[Setup] AFTER clearing - ciris_show_setup is now:",
+        localStorage.getItem("ciris_show_setup")
+      );
+      console.log("[Setup] Setup complete - transitioning to complete step");
+
       setCurrentStep("complete");
     } catch (error: any) {
       toast.error(error.message || "Setup failed");
@@ -232,34 +349,65 @@ export default function SetupWizard() {
                   configure your instance in just a few steps.
                 </p>
 
-                <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-3">What you'll need:</h3>
-                <ul className="space-y-2">
-                  <li className="flex items-start">
-                    <span className="text-indigo-600 mr-2">•</span>
-                    <span>
-                      <strong>LLM API Key</strong> - An API key from OpenAI, Anthropic, or another
-                      supported provider
-                    </span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="text-indigo-600 mr-2">•</span>
-                    <span>
-                      <strong>Admin Password</strong> - A secure password for the default admin
-                      account
-                    </span>
-                  </li>
-                  <li className="flex items-start">
-                    <span className="text-indigo-600 mr-2">•</span>
-                    <span>
-                      <strong>Your Account</strong> - Username and password for your personal
-                      account
-                    </span>
-                  </li>
-                </ul>
+                <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-3">
+                  What you'll configure:
+                </h3>
+                {isGoogleAuth ? (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-green-600 text-xl">✓</span>
+                      <span className="font-semibold text-green-900">Google Sign-In Detected</span>
+                    </div>
+                    <p className="text-sm text-green-800 mb-3">
+                      You're signed in with Google! You can use CIRIS-hosted LLM credits or bring
+                      your own API key.
+                    </p>
+                    <ul className="space-y-2">
+                      <li className="flex items-start">
+                        <span className="text-green-600 mr-2">•</span>
+                        <span>
+                          <strong>LLM Provider</strong> - Use CIRIS Key (your Google account
+                          credits) or Bring Your Own Key
+                        </span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-green-600 mr-2">•</span>
+                        <span>
+                          <strong>Admin Password</strong> - A secure password (min 8 characters) for
+                          the admin account
+                        </span>
+                      </li>
+                    </ul>
+                  </div>
+                ) : (
+                  <ul className="space-y-2">
+                    <li className="flex items-start">
+                      <span className="text-indigo-600 mr-2">•</span>
+                      <span>
+                        <strong>LLM API Key</strong> - An API key from OpenAI, Anthropic, or another
+                        supported provider
+                      </span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="text-indigo-600 mr-2">•</span>
+                      <span>
+                        <strong>Admin Password</strong> - A secure password for the default admin
+                        account
+                      </span>
+                    </li>
+                    <li className="flex items-start">
+                      <span className="text-indigo-600 mr-2">•</span>
+                      <span>
+                        <strong>Your Account</strong> - Username and password for your personal
+                        account
+                      </span>
+                    </li>
+                  </ul>
+                )}
 
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
                   <p className="text-sm text-blue-900">
-                    <strong>Note:</strong> All data is stored locally on your machine. Your API keys
+                    <strong>Note:</strong> All data is stored locally on your device. Your API keys
                     and passwords are encrypted and never shared.
                   </p>
                 </div>
@@ -288,26 +436,36 @@ export default function SetupWizard() {
               </div>
 
               <p className="text-gray-600">
-                Choose your preferred LLM provider and enter your API credentials. We'll test the
-                connection to make sure everything works.
+                {isGoogleAuth
+                  ? "Choose how you want to power your AI assistant. You can use CIRIS-hosted credits or bring your own API key."
+                  : "Enter your LLM API credentials. We'll test the connection to make sure everything works."}
               </p>
 
-              {/* Native App LLM Mode Selection */}
-              {isNativeApp && (
-                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-lg p-5">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">LLM Provider Option</h3>
-                  <div className="space-y-3">
+              {/* LLM Choice Selection - CIRIS Key vs BYOK */}
+              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-lg p-5">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">LLM Provider</h3>
+                <div className="space-y-3">
+                  {/* CIRIS Key option - only available for Google users */}
+                  {isGoogleAuth && (
                     <button
                       onClick={() => {
-                        setNativeLLMMode('ciris_proxy');
-                        setSelectedProvider('ciris_proxy');
+                        console.log("[Setup] CIRIS Key button clicked");
+                        const googleUserId = localStorage.getItem("ciris_google_user_id") || "";
+                        console.log("[Setup] Google User ID from localStorage:", googleUserId);
+                        setLlmChoice("ciris_key");
+                        setNativeLLMMode("ciris_proxy");
+                        setSelectedProvider("openai"); // CIRIS proxy is OpenAI-compatible
                         setLlmValid(true); // CIRIS proxy is pre-validated
-                        setApiKey(''); // No API key needed
-                        setApiBase('https://llm-proxy.ciris.ai');
-                        setSelectedModel('');
+                        // Pre-populate API key with google:{userId} format for debugging
+                        const proxyKey = googleUserId ? `google:${googleUserId}` : "";
+                        setApiKey(proxyKey);
+                        console.log("[Setup] Setting apiKey to:", proxyKey);
+                        setApiBase("https://llm.ciris.ai/v1"); // Correct CIRIS proxy URL
+                        setSelectedModel("default");
+                        localStorage.setItem("ciris_llm_choice", "ciris_key");
                       }}
                       className={`w-full p-4 border-2 rounded-lg text-left transition-all ${
-                        nativeLLMMode === 'ciris_proxy'
+                        llmChoice === "ciris_key"
                           ? "border-indigo-600 bg-white"
                           : "border-gray-200 bg-white hover:border-gray-300"
                       }`}
@@ -315,75 +473,87 @@ export default function SetupWizard() {
                       <div className="flex items-center gap-3">
                         <div className="text-2xl">✨</div>
                         <div className="flex-1">
-                          <div className="font-semibold text-gray-900">Use CIRIS LLM Proxy</div>
+                          <div className="font-semibold text-gray-900">CIRIS Key</div>
                           <div className="text-sm text-gray-600 mt-1">
-                            No API key needed - uses your Google account credits. Fast setup, pay-as-you-go pricing.
+                            Use your Google account for LLM credits. No API key needed - fast setup,
+                            pay-as-you-go pricing.
                           </div>
                         </div>
-                        {nativeLLMMode === 'ciris_proxy' && (
+                        {llmChoice === "ciris_key" && (
                           <span className="text-indigo-600 text-xl">✓</span>
                         )}
                       </div>
                     </button>
+                  )}
 
-                    <button
-                      onClick={() => {
-                        setNativeLLMMode('custom');
-                        setSelectedProvider('');
-                        setLlmValid(false);
-                        setApiBase('');
-                      }}
-                      className={`w-full p-4 border-2 rounded-lg text-left transition-all ${
-                        nativeLLMMode === 'custom'
-                          ? "border-indigo-600 bg-white"
-                          : "border-gray-200 bg-white hover:border-gray-300"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="text-2xl">🔑</div>
-                        <div className="flex-1">
-                          <div className="font-semibold text-gray-900">Use My Own API Key</div>
-                          <div className="text-sm text-gray-600 mt-1">
-                            Bring your own OpenAI, Anthropic, or compatible API key.
-                          </div>
+                  {/* BYOK option - available for all users */}
+                  <button
+                    onClick={() => {
+                      setLlmChoice("byok");
+                      setNativeLLMMode("custom");
+                      setSelectedProvider("");
+                      setLlmValid(false);
+                      setApiBase("");
+                      localStorage.setItem("ciris_llm_choice", "byok");
+                    }}
+                    className={`w-full p-4 border-2 rounded-lg text-left transition-all ${
+                      llmChoice === "byok"
+                        ? "border-indigo-600 bg-white"
+                        : "border-gray-200 bg-white hover:border-gray-300"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="text-2xl">🔑</div>
+                      <div className="flex-1">
+                        <div className="font-semibold text-gray-900">Bring Your Own Key (BYOK)</div>
+                        <div className="text-sm text-gray-600 mt-1">
+                          Use your own OpenAI, Anthropic, or OpenAI-compatible API key.
                         </div>
-                        {nativeLLMMode === 'custom' && (
-                          <span className="text-indigo-600 text-xl">✓</span>
-                        )}
                       </div>
-                    </button>
+                      {llmChoice === "byok" && <span className="text-indigo-600 text-xl">✓</span>}
+                    </div>
+                  </button>
+
+                  {/* Info for non-Google users */}
+                  {!isGoogleAuth && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-2">
+                      <p className="text-sm text-yellow-800">
+                        <strong>Note:</strong> CIRIS Key requires Google Sign-In. Sign in with
+                        Google to use CIRIS-hosted LLM credits.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Provider selection - show when BYOK is selected */}
+              {llmChoice === "byok" && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Provider</label>
+                  <div className="grid grid-cols-2 gap-4">
+                    {providers.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setSelectedProvider(p.id);
+                          setLlmValid(false);
+                        }}
+                        className={`p-4 border-2 rounded-lg text-left transition-all ${
+                          selectedProvider === p.id
+                            ? "border-indigo-600 bg-indigo-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="font-semibold text-gray-900">{p.name}</div>
+                        <div className="text-xs text-gray-500 mt-1">{p.description}</div>
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
 
-              {/* Provider selection - show for non-native app OR when custom mode selected */}
-              {(!isNativeApp || nativeLLMMode === 'custom') && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Provider</label>
-                <div className="grid grid-cols-2 gap-4">
-                  {providers.map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        setSelectedProvider(p.id);
-                        setLlmValid(false);
-                      }}
-                      className={`p-4 border-2 rounded-lg text-left transition-all ${
-                        selectedProvider === p.id
-                          ? "border-indigo-600 bg-indigo-50"
-                          : "border-gray-200 hover:border-gray-300"
-                      }`}
-                    >
-                      <div className="font-semibold text-gray-900">{p.name}</div>
-                      <div className="text-xs text-gray-500 mt-1">{p.description}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              )}
-
-              {/* API Key - only show for custom providers */}
-              {nativeLLMMode !== 'ciris_proxy' && provider && provider.requires_api_key && (
+              {/* API Key - only show for BYOK providers */}
+              {llmChoice === "byok" && provider && provider.requires_api_key && (
                 <div>
                   <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700 mb-2">
                     API Key <span className="text-red-500">*</span>
@@ -403,8 +573,8 @@ export default function SetupWizard() {
                 </div>
               )}
 
-              {/* Model input - only show for custom providers */}
-              {nativeLLMMode !== 'ciris_proxy' && provider && provider.requires_model && (
+              {/* Model input - only show for BYOK providers */}
+              {llmChoice === "byok" && provider && provider.requires_model && (
                 <div>
                   <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-2">
                     Model Name {provider.requires_model && <span className="text-red-500">*</span>}
@@ -428,8 +598,8 @@ export default function SetupWizard() {
                 </div>
               )}
 
-              {/* API Base URL - only show for custom providers */}
-              {nativeLLMMode !== 'ciris_proxy' && provider && provider.requires_base_url && (
+              {/* API Base URL - only show for BYOK providers */}
+              {llmChoice === "byok" && provider && provider.requires_base_url && (
                 <div>
                   <label htmlFor="apiBase" className="block text-sm font-medium text-gray-700 mb-2">
                     API Base URL{" "}
@@ -453,108 +623,110 @@ export default function SetupWizard() {
                 </div>
               )}
 
-              {/* Validation - only show for custom providers */}
-              {nativeLLMMode !== 'ciris_proxy' && (
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={validateLLM}
-                  disabled={validatingLLM || !selectedProvider}
-                  className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {validatingLLM ? "Testing..." : "Test Connection"}
-                </button>
-                {llmValid && <span className="text-green-600 font-medium">✓ Connected</span>}
-              </div>
+              {/* Validation - only show for BYOK providers */}
+              {llmChoice === "byok" && (
+                <div className="flex items-center space-x-4">
+                  <button
+                    onClick={validateLLM}
+                    disabled={validatingLLM || !selectedProvider}
+                    className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {validatingLLM ? "Testing..." : "Test Connection"}
+                  </button>
+                  {llmValid && <span className="text-green-600 font-medium">✓ Connected</span>}
+                </div>
               )}
 
-              {/* CIRIS Proxy status */}
-              {nativeLLMMode === 'ciris_proxy' && (
+              {/* CIRIS Key status */}
+              {useCirisProxy && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
                   <span className="text-green-600 text-xl">✓</span>
                   <div>
                     <div className="font-medium text-green-900">CIRIS LLM Proxy Ready</div>
-                    <div className="text-sm text-green-700">Your Google account will be used for authentication and billing.</div>
+                    <div className="text-sm text-green-700">
+                      Your Google account will be used for authentication and billing.
+                    </div>
                   </div>
                 </div>
               )}
 
-              {/* Optional Backup LLM Configuration - only show when NOT using CIRIS proxy */}
-              {nativeLLMMode !== 'ciris_proxy' && (
-              <div className="border-t border-gray-200 pt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      Backup LLM{" "}
-                      <span className="text-sm font-normal text-gray-500">(Optional)</span>
-                    </h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Configure a secondary LLM provider for redundancy
-                    </p>
+              {/* Optional Backup LLM Configuration - available for all LLM choices */}
+              {llmChoice && (
+                <div className="border-t border-gray-200 pt-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        Backup LLM{" "}
+                        <span className="text-sm font-normal text-gray-500">(Optional)</span>
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Configure a secondary LLM provider for redundancy
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEnableBackupLLM(!enableBackupLLM)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        enableBackupLLM
+                          ? "bg-indigo-100 text-indigo-700"
+                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      }`}
+                    >
+                      {enableBackupLLM ? "Enabled" : "Enable"}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setEnableBackupLLM(!enableBackupLLM)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      enableBackupLLM
-                        ? "bg-indigo-100 text-indigo-700"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                  >
-                    {enableBackupLLM ? "Enabled" : "Enable"}
-                  </button>
+
+                  {enableBackupLLM && (
+                    <div className="space-y-4 pl-4 border-l-2 border-indigo-200">
+                      {/* Backup API Key */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Backup API Key
+                        </label>
+                        <input
+                          type="password"
+                          value={backupApiKey}
+                          onChange={e => setBackupApiKey(e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          placeholder="Backup LLM API key"
+                        />
+                      </div>
+
+                      {/* Backup Model */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Backup Model <span className="text-gray-500">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={backupModel}
+                          onChange={e => setBackupModel(e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          placeholder="Model name"
+                        />
+                      </div>
+
+                      {/* Backup Base URL */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Backup Base URL <span className="text-gray-500">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={backupApiBase}
+                          onChange={e => setBackupApiBase(e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          placeholder="https://api.openai.com/v1"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {enableBackupLLM && (
-                  <div className="space-y-4 pl-4 border-l-2 border-indigo-200">
-                    {/* Backup API Key */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Backup API Key
-                      </label>
-                      <input
-                        type="password"
-                        value={backupApiKey}
-                        onChange={e => setBackupApiKey(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        placeholder="Backup LLM API key"
-                      />
-                    </div>
-
-                    {/* Backup Model */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Backup Model <span className="text-gray-500">(optional)</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={backupModel}
-                        onChange={e => setBackupModel(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        placeholder="Model name"
-                      />
-                    </div>
-
-                    {/* Backup Base URL */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Backup Base URL <span className="text-gray-500">(optional)</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={backupApiBase}
-                        onChange={e => setBackupApiBase(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        placeholder="https://api.openai.com/v1"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
               )}
 
               <button
                 onClick={() => setCurrentStep("users")}
-                disabled={!llmValid && nativeLLMMode !== 'ciris_proxy'}
+                disabled={!llmChoice || (!llmValid && !useCirisProxy)}
                 className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
               >
                 Continue to User Setup →
@@ -576,8 +748,9 @@ export default function SetupWizard() {
               </div>
 
               <p className="text-gray-600">
-                First, set a secure password for the default admin account. Then create your
-                personal user account.
+                {isGoogleAuth
+                  ? "Set a secure password for the default admin account. Your Google account will be used for personal access."
+                  : "First, set a secure password for the default admin account. Then create your personal user account."}
               </p>
 
               {/* Admin Password */}
@@ -589,16 +762,29 @@ export default function SetupWizard() {
                       htmlFor="adminPassword"
                       className="block text-sm font-medium text-gray-700 mb-2"
                     >
-                      New Admin Password
+                      New Admin Password{" "}
+                      <span className="text-xs text-gray-500">(min 8 characters)</span>
                     </label>
                     <input
                       id="adminPassword"
                       type="password"
                       value={adminPassword}
-                      onChange={e => setAdminPassword(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="Enter a secure password"
+                      onChange={e => {
+                        setAdminPassword(e.target.value);
+                        if (e.target.value.length > 0 && e.target.value.length < 8) {
+                          setAdminPasswordError("Password must be at least 8 characters");
+                        } else {
+                          setAdminPasswordError(null);
+                        }
+                      }}
+                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                        adminPasswordError ? "border-red-500" : "border-gray-300"
+                      }`}
+                      placeholder="Enter a secure password (min 8 chars)"
                     />
+                    {adminPasswordError && (
+                      <p className="mt-1 text-sm text-red-600">{adminPasswordError}</p>
+                    )}
                   </div>
                   <div>
                     <label
@@ -619,69 +805,103 @@ export default function SetupWizard() {
                 </div>
               </div>
 
-              {/* User Account */}
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Account</h3>
-                <div className="space-y-4">
-                  <div>
-                    <label
-                      htmlFor="username"
-                      className="block text-sm font-medium text-gray-700 mb-2"
-                    >
-                      Username
-                    </label>
-                    <input
-                      id="username"
-                      type="text"
-                      value={username}
-                      onChange={e => setUsername(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="your_username"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="password"
-                      className="block text-sm font-medium text-gray-700 mb-2"
-                    >
-                      Password
-                    </label>
-                    <input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={e => setPassword(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="Enter your password"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="passwordConfirm"
-                      className="block text-sm font-medium text-gray-700 mb-2"
-                    >
-                      Confirm Password
-                    </label>
-                    <input
-                      id="passwordConfirm"
-                      type="password"
-                      value={passwordConfirm}
-                      onChange={e => setPasswordConfirm(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="Re-enter your password"
-                    />
+              {/* User Account - Only shown for non-Google OAuth users */}
+              {showLocalUserFields && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Your Account</h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label
+                        htmlFor="username"
+                        className="block text-sm font-medium text-gray-700 mb-2"
+                      >
+                        Username
+                      </label>
+                      <input
+                        id="username"
+                        type="text"
+                        value={username}
+                        onChange={e => setUsername(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        placeholder="your_username"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="password"
+                        className="block text-sm font-medium text-gray-700 mb-2"
+                      >
+                        Password <span className="text-xs text-gray-500">(min 8 characters)</span>
+                      </label>
+                      <input
+                        id="password"
+                        type="password"
+                        value={password}
+                        onChange={e => {
+                          setPassword(e.target.value);
+                          if (e.target.value.length > 0 && e.target.value.length < 8) {
+                            setUserPasswordError("Password must be at least 8 characters");
+                          } else {
+                            setUserPasswordError(null);
+                          }
+                        }}
+                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                          userPasswordError ? "border-red-500" : "border-gray-300"
+                        }`}
+                        placeholder="Enter your password (min 8 chars)"
+                      />
+                      {userPasswordError && (
+                        <p className="mt-1 text-sm text-red-600">{userPasswordError}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="passwordConfirm"
+                        className="block text-sm font-medium text-gray-700 mb-2"
+                      >
+                        Confirm Password
+                      </label>
+                      <input
+                        id="passwordConfirm"
+                        type="password"
+                        value={passwordConfirm}
+                        onChange={e => setPasswordConfirm(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        placeholder="Re-enter your password"
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
+
+              {/* Google OAuth info */}
+              {isGoogleAuth && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-green-600 text-xl">✓</span>
+                    <span className="font-semibold text-green-900">Google Account Connected</span>
+                  </div>
+                  <p className="text-sm text-green-800">
+                    You'll sign in to CIRIS using your Google account. No additional local account
+                    needed.
+                  </p>
+                </div>
+              )}
 
               <button
                 onClick={() => setCurrentStep("template")}
                 disabled={
                   !adminPassword ||
                   !adminPasswordConfirm ||
-                  !username ||
-                  !password ||
-                  !passwordConfirm
+                  adminPassword.length < 8 ||
+                  adminPassword !== adminPasswordConfirm ||
+                  // Only require local user account for non-Google OAuth users
+                  (showLocalUserFields &&
+                    (!username ||
+                      !password ||
+                      !passwordConfirm ||
+                      password.length < 8 ||
+                      password !== passwordConfirm))
                 }
                 className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
               >
@@ -1102,14 +1322,38 @@ export default function SetupWizard() {
               </div>
               <h2 className="text-3xl font-bold text-gray-900">Setup Complete!</h2>
               <p className="text-gray-600 max-w-md mx-auto">
-                Your CIRIS instance is now configured and ready to use. You can log in with your
-                credentials.
+                {isNativeApp
+                  ? "Your CIRIS instance is now configured and ready to use."
+                  : "Your CIRIS instance is now configured and ready to use. You can log in with your credentials."}
               </p>
               <button
-                onClick={() => router.push("/login")}
+                onClick={() => {
+                  // Check localStorage directly to avoid race condition with React state
+                  // Native injection may have completed after React state was set
+                  const actuallyNativeApp = localStorage.getItem("isNativeApp") === "true";
+                  console.log(
+                    "[Setup Complete] Button clicked - isNativeApp state:",
+                    isNativeApp,
+                    "localStorage isNativeApp:",
+                    actuallyNativeApp
+                  );
+
+                  // Native app users are already authenticated, go to main app
+                  // Non-native users need to login first
+                  if (actuallyNativeApp || isNativeApp) {
+                    console.log("[Setup Complete] Navigating to / (native app mode)");
+                    // Use window.location for reliable WebView navigation
+                    window.location.href = "/";
+                  } else {
+                    console.log("[Setup Complete] Navigating to /login (browser mode)");
+                    router.push("/login");
+                  }
+                }}
                 className="px-8 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
               >
-                Go to Login →
+                {localStorage.getItem("isNativeApp") === "true" || isNativeApp
+                  ? "Start Using CIRIS →"
+                  : "Go to Login →"}
               </button>
             </div>
           )}
