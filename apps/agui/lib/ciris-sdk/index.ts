@@ -3,36 +3,34 @@
 // A TypeScript SDK for the CIRIS v1 API that mirrors the Python SDK functionality
 // with automatic response unwrapping, rate limiting, and type safety.
 
-export { CIRISClient, cirisClient } from './client';
-export type { CIRISClientOptions } from './client';
+export { CIRISClient, cirisClient } from "./client";
+export type { CIRISClientOptions } from "./client";
 
 // Export all types
-export * from './types';
+export * from "./types";
 
 // Export exceptions
-export * from './exceptions';
+export * from "./exceptions";
 
 // Export utilities
-export { AuthStore } from './auth-store';
-export { RateLimiter } from './rate-limiter';
+export { AuthStore } from "./auth-store";
+export { RateLimiter } from "./rate-limiter";
 
 // Export resources for advanced usage
-export { AuthResource } from './resources/auth';
-export { AgentResource } from './resources/agent';
-export { SystemResource } from './resources/system';
-export { MemoryResource } from './resources/memory';
-export { ConfigResource, unwrapConfigValue, wrapConfigValue } from './resources/config';
-export { UsersResource } from './resources/users';
-export { ConsentResource } from './resources/consent';
-export * from './resources/manager';
-
+export { AuthResource } from "./resources/auth";
+export { AgentResource } from "./resources/agent";
+export { SystemResource } from "./resources/system";
+export { MemoryResource } from "./resources/memory";
+export { ConfigResource, unwrapConfigValue, wrapConfigValue } from "./resources/config";
+export { UsersResource } from "./resources/users";
+export { ConsentResource } from "./resources/consent";
 // Export OAuth types
 export type {
   OAuthProvider,
   OAuthProviderList,
   OAuthProviderConfig,
-  OAuthLoginResponse
-} from './resources/auth';
+  OAuthLoginResponse,
+} from "./resources/auth";
 
 // Export user management types
 export type {
@@ -46,8 +44,8 @@ export type {
   UserAPIKey,
   PermissionRequestUser,
   PermissionRequestResponse,
-  PermissionGrantRequest
-} from './resources/users';
+  PermissionGrantRequest,
+} from "./resources/users";
 
 // Export consent types
 export {
@@ -62,5 +60,5 @@ export {
   type ConsentCategoryInfo,
   type PartnershipStatus,
   type ConsentStreamsResponse,
-  type ConsentCategoriesResponse
-} from './resources/consent';
+  type ConsentCategoriesResponse,
+} from "./resources/consent";

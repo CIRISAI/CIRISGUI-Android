@@ -6,12 +6,7 @@ import { useAgent } from "../contexts/AgentContextHybrid";
 import { useRouter } from "next/navigation";
 // import AgentSelector from "./AgentSelector"; // Removed - agents require separate auth
 import React, { useState, useEffect } from "react";
-import {
-  HoveredLink,
-  Menu,
-  MenuItem,
-  ProductItem,
-} from "../components/ui/navbar-menu";
+import { HoveredLink, Menu, MenuItem, ProductItem } from "../components/ui/navbar-menu";
 import { cn } from "../lib/utils";
 interface LayoutProps {
   children: React.ReactNode;
@@ -25,15 +20,13 @@ function Navbar({ className }: { className?: string }) {
   // Debug logging for role checking
   React.useEffect(() => {
     if (user) {
-      console.log('🔐 User role:', user.role);
-      console.log('🔐 Has ADMIN?', hasRole('ADMIN'));
-      console.log('🔐 Has SYSTEM_ADMIN?', hasRole('SYSTEM_ADMIN'));
+      console.log("🔐 User role:", user.role);
+      console.log("🔐 Has ADMIN?", hasRole("ADMIN"));
+      console.log("🔐 Has SYSTEM_ADMIN?", hasRole("SYSTEM_ADMIN"));
     }
   }, [user, hasRole]);
 
-  const navigation = [
-    { name: "Interact", href: "/", minRole: "OBSERVER" }
-  ];
+  const navigation = [{ name: "Interact", href: "/", minRole: "OBSERVER" }];
   const systemNavigation = [
     { name: "Memory Graph", href: "/memory", minRole: "OBSERVER" },
     { name: "System Details", href: "/dashboard", minRole: "OBSERVER" },
@@ -68,7 +61,7 @@ function Navbar({ className }: { className?: string }) {
     }
 
     try {
-      const { CIRISClient } = await import('@/lib/ciris-sdk');
+      const { CIRISClient } = await import("@/lib/ciris-sdk");
       const client = new CIRISClient();
       const response = await client.system.shutdown(reason, true, force);
 
@@ -77,10 +70,10 @@ function Navbar({ className }: { className?: string }) {
       // Redirect to login after a brief delay
       setTimeout(() => {
         logout();
-        router.push('/login');
+        router.push("/login");
       }, 2000);
     } catch (error: any) {
-      alert(`${actionType} failed: ${error.message || 'Unknown error'}`);
+      alert(`${actionType} failed: ${error.message || "Unknown error"}`);
     }
   };
   const accountNavigation = [
@@ -92,21 +85,15 @@ function Navbar({ className }: { className?: string }) {
     { name: "Billing", href: "/billing", minRole: "OBSERVER" },
   ];
 
-  const visibleNavigation = navigation.filter((item) => hasRole(item.minRole));
-  const visibleSystemNavigation = systemNavigation.filter((item) =>
-    hasRole(item.minRole)
-  );
-  const visibleAdminNavigation = adminNavigation.filter((item) =>
-    hasRole(item.minRole)
-  );
-  const visibleAccountNavigation = accountNavigation.filter((item) =>
-    hasRole(item.minRole)
-  );
+  const visibleNavigation = navigation.filter(item => hasRole(item.minRole));
+  const visibleSystemNavigation = systemNavigation.filter(item => hasRole(item.minRole));
+  const visibleAdminNavigation = adminNavigation.filter(item => hasRole(item.minRole));
+  const visibleAccountNavigation = accountNavigation.filter(item => hasRole(item.minRole));
 
   // Debug logging
   React.useEffect(() => {
-    console.log('🔐 visibleAdminNavigation.length:', visibleAdminNavigation.length);
-    console.log('🔐 visibleAdminNavigation:', visibleAdminNavigation);
+    console.log("🔐 visibleAdminNavigation.length:", visibleAdminNavigation.length);
+    console.log("🔐 visibleAdminNavigation:", visibleAdminNavigation);
   }, [visibleAdminNavigation]);
   return (
     <div className={cn("fixed   inset-x-0 max-w-2xl mx-auto z-50", className)}>
@@ -114,21 +101,23 @@ function Navbar({ className }: { className?: string }) {
         <Link href={"/"}>
           <LogoIcon className="h-12 w-12 text-brand-primary fill-brand-primary" />
         </Link>
-        {visibleNavigation.map((item) => (
+        {visibleNavigation.map(item => (
           <Link
             key={item.name}
             href={item.href}
-            className="border-transparent text-gray-900 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2  font-medium">
+            className="border-transparent text-gray-900 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2  font-medium"
+          >
             {item.name}
           </Link>
         ))}
         <MenuItem setActive={setActive} active={active} item="System">
           <div className="flex flex-col space-y-4 text-sm">
-            {visibleSystemNavigation.map((item) => (
+            {visibleSystemNavigation.map(item => (
               <Link
                 key={item.name}
                 href={item.href}
-                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+              >
                 {item.name}
               </Link>
             ))}
@@ -136,20 +125,22 @@ function Navbar({ className }: { className?: string }) {
         </MenuItem>
         <MenuItem setActive={setActive} active={active} item="Account">
           <div className="flex flex-col space-y-4 text-sm">
-            {visibleAccountNavigation.map((item) => (
+            {visibleAccountNavigation.map(item => (
               <Link
                 key={item.name}
                 href={item.href}
-                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+              >
                 {item.name}
               </Link>
             ))}
             <button
               onClick={() => {
                 logout();
-                router.push('/login');
+                router.push("/login");
               }}
-              className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium text-left">
+              className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium text-left"
+            >
               Logout
             </button>
           </div>
@@ -157,23 +148,26 @@ function Navbar({ className }: { className?: string }) {
         {hasRole("ADMIN") && visibleAdminNavigation.length > 0 && (
           <MenuItem setActive={setActive} active={active} item="Admin">
             <div className="flex flex-col space-y-4 text-sm">
-              {visibleAdminNavigation.map((item) => (
+              {visibleAdminNavigation.map(item => (
                 <Link
                   key={item.name}
                   href={item.href}
-                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                >
                   {item.name}
                 </Link>
               ))}
               <div className="border-t border-gray-300 pt-2 space-y-2">
                 <button
                   onClick={() => handleShutdown(false)}
-                  className="border-transparent text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 inline-flex items-center px-1 pt-1 text-sm font-medium text-left w-full rounded">
+                  className="border-transparent text-yellow-600 hover:text-yellow-800 hover:bg-yellow-50 inline-flex items-center px-1 pt-1 text-sm font-medium text-left w-full rounded"
+                >
                   Graceful Shutdown
                 </button>
                 <button
                   onClick={() => handleShutdown(true)}
-                  className="border-transparent text-red-600 hover:text-red-800 hover:bg-red-50 inline-flex items-center px-1 pt-1 text-sm font-medium text-left w-full rounded">
+                  className="border-transparent text-red-600 hover:text-red-800 hover:bg-red-50 inline-flex items-center px-1 pt-1 text-sm font-medium text-left w-full rounded"
+                >
                   Force Shutdown
                 </button>
               </div>
@@ -185,7 +179,8 @@ function Navbar({ className }: { className?: string }) {
             {hasRole("SYSTEM_ADMIN") && (
               <button
                 onClick={() => router.push("/emergency")}
-                className="text-xs bg-transparent transition-all duration-300 cursor-pointer px-4 py-1 rounded-sm text-red-500 border-red-500 border hover:border-gray-700 hover:text-gray-700">
+                className="text-xs bg-transparent transition-all duration-300 cursor-pointer px-4 py-1 rounded-sm text-red-500 border-red-500 border hover:border-gray-700 hover:text-gray-700"
+              >
                 Emergency
               </button>
             )}
@@ -197,16 +192,14 @@ function Navbar({ className }: { className?: string }) {
 }
 export function Layout({ children }: LayoutProps) {
   const { user, logout, hasRole } = useAuth();
-  const { currentAgent, currentAgentRole, agents } = useAgent();
+  const { currentAgent, currentAgentRole } = useAgent();
   const router = useRouter();
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar className="top-2 z-50" />
       <main className=" container pt-10 sm:px-6 lg:px-8">
-        <div className=" pt-20 sm:px-6 lg:px-8">
-          {children}
-        </div>
+        <div className=" pt-20 sm:px-6 lg:px-8">{children}</div>
       </main>
     </div>
   );

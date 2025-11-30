@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../contexts/AuthContext";
 import { cirisClient } from "../../lib/ciris-sdk";
-import type { AgentInfo } from "../../lib/ciris-sdk";
 import { SDK_VERSION } from "../../lib/ciris-sdk/version";
 import LogoIcon from "../../components/ui/floating/LogoIcon";
 import { useGoogleAuth, getPlatform, isNativePlatform } from "../../hooks/useGoogleAuth";
@@ -36,7 +35,8 @@ export default function LoginPage() {
     const info: Record<string, string> = {
       platform: getPlatform(),
       isNative: isNativePlatform() ? "Yes" : "No",
-      userAgent: typeof navigator !== "undefined" ? navigator.userAgent.substring(0, 50) + "..." : "N/A",
+      userAgent:
+        typeof navigator !== "undefined" ? navigator.userAgent.substring(0, 50) + "..." : "N/A",
     };
 
     // Try to get capacitor config
@@ -45,7 +45,8 @@ export default function LoginPage() {
       if (configEl) {
         try {
           const config = JSON.parse(configEl.textContent || "{}");
-          info.serverClientId = config?.plugins?.GoogleAuth?.serverClientId?.substring(0, 20) + "..." || "Not found";
+          info.serverClientId =
+            config?.plugins?.GoogleAuth?.serverClientId?.substring(0, 20) + "..." || "Not found";
         } catch {
           info.serverClientId = "Parse error";
         }
@@ -155,12 +156,8 @@ export default function LoginPage() {
           <div className="space-y-4">
             {isSignedIn && googleUser ? (
               <div className="p-4 bg-green-50 border border-green-200 rounded-md">
-                <p className="text-sm text-green-800">
-                  Signed in as: {googleUser.email}
-                </p>
-                <p className="text-xs text-green-600 mt-1">
-                  User ID: {googleUser.id}
-                </p>
+                <p className="text-sm text-green-800">Signed in as: {googleUser.email}</p>
+                <p className="text-xs text-green-600 mt-1">User ID: {googleUser.id}</p>
               </div>
             ) : (
               <button

@@ -10,9 +10,8 @@ import type {
 } from "../../lib/ciris-sdk/resources/setup";
 import LogoIcon from "../../components/ui/floating/LogoIcon";
 import toast from "react-hot-toast";
-import { ADAPTERS } from "./adapters-config";
 
-type Step = "welcome" | "llm" | "users" | "template" | "adapters" | "complete";
+type Step = "welcome" | "llm" | "users" | "template" | "complete";
 
 export default function SetupWizard() {
   const router = useRouter();
@@ -25,7 +24,7 @@ export default function SetupWizard() {
   const [isNativeApp, setIsNativeApp] = useState(false);
   const [isGoogleAuth, setIsGoogleAuth] = useState(false); // Separate from LLM choice
   const [llmChoice, setLlmChoice] = useState<"ciris_key" | "byok" | null>(null);
-  const [nativeLLMMode, setNativeLLMMode] = useState<"ciris_proxy" | "custom" | null>(null);
+  const [_nativeLLMMode, setNativeLLMMode] = useState<"ciris_proxy" | "custom" | null>(null);
 
   // Form state - Primary LLM
   const [selectedProvider, setSelectedProvider] = useState("");
@@ -56,11 +55,7 @@ export default function SetupWizard() {
   // Check if using CIRIS proxy (affects LLM configuration)
   const useCirisProxy = llmChoice === "ciris_key";
 
-  const [selectedTemplate, setSelectedTemplate] = useState("");
-
-  // Adapter selection state
-  const [enabledAdapters, setEnabledAdapters] = useState<string[]>(["api"]);
-  const [adapterConfigs, setAdapterConfigs] = useState<Record<string, Record<string, string>>>({});
+  const [selectedTemplate, setSelectedTemplate] = useState("ally");
 
   // Helper to read native app state from localStorage
   const readNativeAppState = () => {
@@ -217,23 +212,30 @@ export default function SetupWizard() {
 
     setLoading(true);
     try {
-      // For CIRIS proxy mode (CIRIS Key), use google:{userId} as API key format
-      // The CIRIS LLM proxy at llm.ciris.ai authenticates via Bearer google:{google_user_id}
+      // For CIRIS proxy mode (CIRIS Key), use the actual Google ID Token (JWT)
+      // The CIRIS LLM proxy at llm.ciris.ai verifies the JWT with Google's public keys
+      const googleIdToken = localStorage.getItem("ciris_google_id_token") || "";
       const googleUserId = localStorage.getItem("ciris_google_user_id") || "";
-      const cirisProxyApiKey = googleUserId ? `google:${googleUserId}` : "";
 
       console.log("[Setup] CIRIS proxy config:");
       console.log("[Setup]   googleUserId:", googleUserId);
-      console.log("[Setup]   cirisProxyApiKey:", cirisProxyApiKey);
+      console.log("[Setup]   googleIdToken length:", googleIdToken.length);
+      console.log("[Setup]   googleIdToken prefix:", googleIdToken.substring(0, 20) + "...");
 
-      if (useCirisProxy && !googleUserId) {
-        console.error("[Setup] CIRIS proxy requires Google user ID but none found in localStorage");
-        toast.error("Google user ID not found. Please sign out and sign in again with Google.");
+      if (useCirisProxy && !googleIdToken) {
+        console.error(
+          "[Setup] CIRIS proxy requires Google ID Token but none found in localStorage"
+        );
+        toast.error("Google ID Token not found. Please sign out and sign in again with Google.");
+        setLoading(false);
+        return;
       }
 
       // Determine final values based on mode
-      const finalProvider = useCirisProxy ? "openai" : selectedProvider;
-      const finalApiKey = useCirisProxy ? cirisProxyApiKey : apiKey;
+      // IMPORTANT: Use "other" provider when using CIRIS proxy so backend writes OPENAI_API_BASE to .env
+      // If we use "openai", the backend only writes the API key and comments out the base URL
+      const finalProvider = useCirisProxy ? "other" : selectedProvider;
+      const finalApiKey = useCirisProxy ? googleIdToken : apiKey; // Use actual JWT, not google:{userId}
       const finalBaseUrl = useCirisProxy ? "https://llm.ciris.ai/v1" : apiBase || null;
       const finalModel = useCirisProxy ? "default" : selectedModel || null;
 
@@ -246,6 +248,10 @@ export default function SetupWizard() {
       console.log("[Setup]   llm_base_url:", finalBaseUrl);
       console.log("[Setup]   llm_model:", finalModel);
 
+      // Get auth method from localStorage
+      const authMethod = localStorage.getItem("ciris_auth_method");
+      const oauthProvider = authMethod === "google" ? "google" : null;
+
       const config: SetupCompleteRequest = {
         llm_provider: finalProvider,
         llm_api_key: finalApiKey,
@@ -256,16 +262,34 @@ export default function SetupWizard() {
         backup_llm_base_url: enableBackupLLM && backupApiBase ? backupApiBase : null,
         backup_llm_model: enableBackupLLM && backupModel ? backupModel : null,
         template_id: selectedTemplate || "general",
-        enabled_adapters: enabledAdapters,
-        adapter_config: adapterConfigs,
-        admin_username: username,
-        admin_password: password,
-        system_admin_password: adminPassword, // Update default admin password
+        enabled_adapters: ["api"], // Default to just API adapter
+        adapter_config: {},
+        // For OAuth users, username/password may be empty - server generates random password
+        admin_username: username || (oauthProvider ? `oauth_${oauthProvider}_user` : "admin"),
+        admin_password: password || null, // Optional for OAuth users
+        system_admin_password: adminPassword || null, // Update default admin password (optional)
+        oauth_provider: oauthProvider, // Tell server this is an OAuth user
         agent_port: 8080,
       };
 
       const response = await cirisClient.setup.complete(config);
       console.log("[Setup] Setup API response:", JSON.stringify(response));
+
+      // Save the selected agent template name for AgentContext to use
+      // This is used as a fallback when the /v1/agent/identity endpoint isn't available yet
+      const selectedTemplateObj = templates.find(t => t.id === selectedTemplate);
+      if (selectedTemplateObj) {
+        // Use the template name as the agent name (e.g., "Ally", "Datum", etc.)
+        localStorage.setItem("selectedAgentName", selectedTemplateObj.name);
+        localStorage.setItem("selectedAgentId", selectedTemplateObj.id);
+        console.log(
+          "[Setup] Saved agent selection:",
+          selectedTemplateObj.name,
+          "(",
+          selectedTemplateObj.id,
+          ")"
+        );
+      }
 
       // CRITICAL: Clear the setup flag to prevent redirect loop
       console.log(
@@ -304,27 +328,25 @@ export default function SetupWizard() {
         {currentStep !== "complete" && (
           <div className="mb-8">
             <div className="flex items-center justify-center space-x-2 sm:space-x-4">
-              {["welcome", "llm", "users", "template", "adapters"].map((step, idx) => (
+              {["welcome", "llm", "users", "template"].map((step, idx) => (
                 <div key={step} className="flex items-center">
                   <div
                     className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full text-sm sm:text-base ${
                       currentStep === step
                         ? "bg-indigo-600 text-white"
-                        : idx <
-                            ["welcome", "llm", "users", "template", "adapters"].indexOf(currentStep)
+                        : idx < ["welcome", "llm", "users", "template"].indexOf(currentStep)
                           ? "bg-green-500 text-white"
                           : "bg-gray-200 text-gray-500"
                     }`}
                   >
-                    {idx < ["welcome", "llm", "users", "template", "adapters"].indexOf(currentStep)
+                    {idx < ["welcome", "llm", "users", "template"].indexOf(currentStep)
                       ? "✓"
                       : idx + 1}
                   </div>
-                  {idx < 4 && (
+                  {idx < 3 && (
                     <div
                       className={`w-8 sm:w-16 h-1 ${
-                        idx <
-                        ["welcome", "llm", "users", "template", "adapters"].indexOf(currentStep)
+                        idx < ["welcome", "llm", "users", "template"].indexOf(currentStep)
                           ? "bg-green-500"
                           : "bg-gray-200"
                       }`}
@@ -359,15 +381,21 @@ export default function SetupWizard() {
                       <span className="font-semibold text-green-900">Google Sign-In Detected</span>
                     </div>
                     <p className="text-sm text-green-800 mb-3">
-                      You're signed in with Google! You can use CIRIS-hosted LLM credits or bring
-                      your own API key.
+                      You're signed in with Google! You have two options for LLM access:
                     </p>
                     <ul className="space-y-2">
                       <li className="flex items-start">
                         <span className="text-green-600 mr-2">•</span>
                         <span>
-                          <strong>LLM Provider</strong> - Use CIRIS Key (your Google account
-                          credits) or Bring Your Own Key
+                          <strong>CIRIS Key</strong> - Use your Google account for pay-as-you-go LLM
+                          credits (no API key needed)
+                        </span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-green-600 mr-2">•</span>
+                        <span>
+                          <strong>Bring Your Own Key (BYOK)</strong> - Use your own OpenAI,
+                          Anthropic, or compatible API key
                         </span>
                       </li>
                       <li className="flex items-start">
@@ -475,8 +503,17 @@ export default function SetupWizard() {
                         <div className="flex-1">
                           <div className="font-semibold text-gray-900">CIRIS Key</div>
                           <div className="text-sm text-gray-600 mt-1">
-                            Use your Google account for LLM credits. No API key needed - fast setup,
-                            pay-as-you-go pricing.
+                            Use your Google account for LLM access. No API key needed!
+                          </div>
+                          <div className="mt-2 p-2 bg-green-50 rounded-md">
+                            <div className="text-xs font-medium text-green-800">
+                              Free tier included:
+                            </div>
+                            <ul className="text-xs text-green-700 mt-1 space-y-0.5">
+                              <li>• 5 free interactions to start</li>
+                              <li>• 2 free interactions per day</li>
+                              <li>• Purchase more via Google Play ($4.99 for 100 credits)</li>
+                            </ul>
                           </div>
                         </div>
                         {llmChoice === "ciris_key" && (
@@ -508,6 +545,16 @@ export default function SetupWizard() {
                         <div className="font-semibold text-gray-900">Bring Your Own Key (BYOK)</div>
                         <div className="text-sm text-gray-600 mt-1">
                           Use your own OpenAI, Anthropic, or OpenAI-compatible API key.
+                        </div>
+                        <div className="mt-2 p-2 bg-blue-50 rounded-md">
+                          <div className="text-xs font-medium text-blue-800">
+                            100% Free - No CIRIS charges
+                          </div>
+                          <ul className="text-xs text-blue-700 mt-1 space-y-0.5">
+                            <li>• Unlimited interactions using your API key</li>
+                            <li>• You pay your provider directly (OpenAI, Anthropic, etc.)</li>
+                            <li>• Full control over model selection and costs</li>
+                          </ul>
                         </div>
                       </div>
                       {llmChoice === "byok" && <span className="text-indigo-600 text-xl">✓</span>}
@@ -758,13 +805,44 @@ export default function SetupWizard() {
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Admin Account</h3>
                 <div className="space-y-4">
                   <div>
-                    <label
-                      htmlFor="adminPassword"
-                      className="block text-sm font-medium text-gray-700 mb-2"
-                    >
-                      New Admin Password{" "}
-                      <span className="text-xs text-gray-500">(min 8 characters)</span>
-                    </label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label
+                        htmlFor="adminPassword"
+                        className="block text-sm font-medium text-gray-700"
+                      >
+                        New Admin Password{" "}
+                        <span className="text-xs text-gray-500">(min 8 characters)</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Generate a random 16-character password
+                          const chars =
+                            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+                          let randomPassword = "";
+                          for (let i = 0; i < 16; i++) {
+                            randomPassword += chars.charAt(
+                              Math.floor(Math.random() * chars.length)
+                            );
+                          }
+                          setAdminPassword(randomPassword);
+                          setAdminPasswordConfirm(randomPassword);
+                          setAdminPasswordError(null);
+                          // Copy to clipboard
+                          navigator.clipboard
+                            .writeText(randomPassword)
+                            .then(() => {
+                              toast.success("Random password generated and copied to clipboard!");
+                            })
+                            .catch(() => {
+                              toast.success(`Random password generated: ${randomPassword}`);
+                            });
+                        }}
+                        className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                      >
+                        Generate Random
+                      </button>
+                    </div>
                     <input
                       id="adminPassword"
                       type="password"
@@ -891,8 +969,8 @@ export default function SetupWizard() {
               <button
                 onClick={() => setCurrentStep("template")}
                 disabled={
+                  // Admin password is ALWAYS required (min 8 chars, must match)
                   !adminPassword ||
-                  !adminPasswordConfirm ||
                   adminPassword.length < 8 ||
                   adminPassword !== adminPasswordConfirm ||
                   // Only require local user account for non-Google OAuth users
@@ -936,21 +1014,15 @@ export default function SetupWizard() {
                 </p>
               </div>
 
-              {/* Templates Info */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 sm:p-5">
-                <div className="flex items-start gap-3">
-                  <span className="text-blue-600 text-xl flex-shrink-0">ℹ️</span>
-                  <div>
-                    <h4 className="text-sm font-semibold text-blue-900 mb-1">
-                      Choose Your Agent Template
-                    </h4>
-                    <p className="text-sm text-blue-700">
-                      Select from available templates for different use cases including customer
-                      service, research, GDPR automation, and moderation. Each template comes with
-                      pre-configured SOPs and stewardship tier ratings.
-                    </p>
-                  </div>
-                </div>
+              {/* Complete Setup Button - at top for easy access */}
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                <button
+                  onClick={completeSetup}
+                  disabled={loading}
+                  className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                >
+                  {loading ? "Completing Setup..." : "Complete Setup"}
+                </button>
               </div>
 
               {/* Available Templates */}
@@ -1012,309 +1084,10 @@ export default function SetupWizard() {
                   </div>
                 )}
               </div>
-
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                <button
-                  onClick={() => setCurrentStep("adapters")}
-                  className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
-                >
-                  Continue to Adapters →
-                </button>
-              </div>
             </div>
           )}
 
-          {/* Step 5: Adapters */}
-          {currentStep === "adapters" && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-900">Configure Adapters</h2>
-                <button
-                  onClick={() => setCurrentStep("template")}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  ← Back
-                </button>
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 sm:p-5">
-                <div className="flex items-start gap-3">
-                  <span className="text-yellow-600 text-xl flex-shrink-0">⚠️</span>
-                  <div>
-                    <h3 className="text-sm font-semibold text-yellow-900 mb-1">Restart Required</h3>
-                    <p className="text-sm text-yellow-800">
-                      Adapter configuration changes require restarting the CIRIS agent to take
-                      effect.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                {/* Core Adapters */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Core Adapters</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Communication interfaces for interacting with your agent.
-                  </p>
-                  <div className="space-y-4">
-                    {ADAPTERS.core.map(adapter => (
-                      <div key={adapter.id} className="border-2 rounded-lg overflow-hidden">
-                        <button
-                          onClick={() => {
-                            if (!adapter.required) {
-                              setEnabledAdapters(prev =>
-                                prev.includes(adapter.id)
-                                  ? prev.filter(id => id !== adapter.id)
-                                  : [...prev, adapter.id]
-                              );
-                            }
-                          }}
-                          disabled={adapter.required}
-                          className={`w-full p-4 text-left transition-all ${
-                            enabledAdapters.includes(adapter.id)
-                              ? "border-indigo-600 bg-indigo-50"
-                              : "border-gray-200 bg-white hover:bg-gray-50"
-                          } ${adapter.required ? "cursor-not-allowed" : ""}`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 mt-0.5">
-                              {enabledAdapters.includes(adapter.id) ? (
-                                <span className="text-indigo-600 text-xl">✓</span>
-                              ) : (
-                                <span className="text-gray-400 text-xl">○</span>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap mb-1">
-                                <h4 className="text-base font-semibold text-gray-900">
-                                  {adapter.name}
-                                </h4>
-                                {adapter.required && (
-                                  <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                                    Required
-                                  </span>
-                                )}
-                                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
-                                  {adapter.tools} {adapter.tools === 1 ? "tool" : "tools"}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-600">{adapter.description}</p>
-                            </div>
-                          </div>
-                        </button>
-
-                        {/* Configuration Fields */}
-                        {enabledAdapters.includes(adapter.id) &&
-                          adapter.configFields &&
-                          adapter.configFields.length > 0 && (
-                            <div className="bg-gray-50 p-4 border-t border-gray-200 space-y-4">
-                              <h5 className="text-sm font-semibold text-gray-900">Configuration</h5>
-                              {adapter.configFields.map(field => (
-                                <div key={field.name}>
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    {field.label}
-                                    {field.required && <span className="text-red-500 ml-1">*</span>}
-                                  </label>
-                                  {field.type === "select" ? (
-                                    <select
-                                      value={
-                                        adapterConfigs[adapter.id]?.[field.name] ||
-                                        ("default" in field ? field.default : "") ||
-                                        ""
-                                      }
-                                      onChange={e =>
-                                        setAdapterConfigs(prev => ({
-                                          ...prev,
-                                          [adapter.id]: {
-                                            ...prev[adapter.id],
-                                            [field.name]: e.target.value,
-                                          },
-                                        }))
-                                      }
-                                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    >
-                                      {("options" in field
-                                        ? (field.options as string[])
-                                        : ([] as string[])
-                                      ).map(option => (
-                                        <option key={option} value={option}>
-                                          {option}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  ) : (
-                                    <input
-                                      type={field.type}
-                                      value={
-                                        adapterConfigs[adapter.id]?.[field.name] ||
-                                        ("default" in field ? field.default : "") ||
-                                        ""
-                                      }
-                                      onChange={e =>
-                                        setAdapterConfigs(prev => ({
-                                          ...prev,
-                                          [adapter.id]: {
-                                            ...prev[adapter.id],
-                                            [field.name]: e.target.value,
-                                          },
-                                        }))
-                                      }
-                                      placeholder={"default" in field ? field.default : ""}
-                                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                      required={field.required}
-                                    />
-                                  )}
-                                  <p className="mt-1 text-xs text-gray-500">{field.description}</p>
-                                  {field.envVar && (
-                                    <p className="mt-0.5 text-xs text-gray-400">
-                                      Env: {field.envVar}
-                                    </p>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Modular Services */}
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Modular Services</h3>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Optional capabilities that extend your agent's functionality.
-                  </p>
-                  <div className="space-y-4">
-                    {ADAPTERS.modular.map(service => (
-                      <div key={service.id} className="border-2 rounded-lg overflow-hidden">
-                        <button
-                          onClick={() => {
-                            setEnabledAdapters(prev =>
-                              prev.includes(service.id)
-                                ? prev.filter(id => id !== service.id)
-                                : [...prev, service.id]
-                            );
-                          }}
-                          className={`w-full p-4 text-left transition-all ${
-                            enabledAdapters.includes(service.id)
-                              ? "border-indigo-600 bg-indigo-50"
-                              : "border-gray-200 bg-white hover:bg-gray-50"
-                          }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 mt-0.5">
-                              {enabledAdapters.includes(service.id) ? (
-                                <span className="text-indigo-600 text-xl">✓</span>
-                              ) : (
-                                <span className="text-gray-400 text-xl">○</span>
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap mb-1">
-                                <h4 className="text-base font-semibold text-gray-900">
-                                  {service.name}
-                                </h4>
-                                <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-800">
-                                  {service.tools} {service.tools === 1 ? "tool" : "tools"}
-                                </span>
-                              </div>
-                              <p className="text-sm text-gray-600">{service.description}</p>
-                            </div>
-                          </div>
-                        </button>
-
-                        {/* Configuration Fields */}
-                        {enabledAdapters.includes(service.id) &&
-                          service.configFields &&
-                          service.configFields.length > 0 && (
-                            <div className="bg-gray-50 p-4 border-t border-gray-200 space-y-4">
-                              <h5 className="text-sm font-semibold text-gray-900">Configuration</h5>
-                              {service.configFields.map(field => (
-                                <div key={field.name}>
-                                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    {field.label}
-                                    {field.required && <span className="text-red-500 ml-1">*</span>}
-                                  </label>
-                                  {field.type === "select" ? (
-                                    <select
-                                      value={
-                                        adapterConfigs[service.id]?.[field.name] ||
-                                        ("default" in field ? field.default : "") ||
-                                        ""
-                                      }
-                                      onChange={e =>
-                                        setAdapterConfigs(prev => ({
-                                          ...prev,
-                                          [service.id]: {
-                                            ...prev[service.id],
-                                            [field.name]: e.target.value,
-                                          },
-                                        }))
-                                      }
-                                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    >
-                                      {("options" in field
-                                        ? (field.options as string[])
-                                        : ([] as string[])
-                                      ).map(option => (
-                                        <option key={option} value={option}>
-                                          {option}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  ) : (
-                                    <input
-                                      type={field.type}
-                                      value={
-                                        adapterConfigs[service.id]?.[field.name] ||
-                                        ("default" in field ? field.default : "") ||
-                                        ""
-                                      }
-                                      onChange={e =>
-                                        setAdapterConfigs(prev => ({
-                                          ...prev,
-                                          [service.id]: {
-                                            ...prev[service.id],
-                                            [field.name]: e.target.value,
-                                          },
-                                        }))
-                                      }
-                                      placeholder={"default" in field ? field.default : ""}
-                                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                      required={field.required}
-                                    />
-                                  )}
-                                  <p className="mt-1 text-xs text-gray-500">{field.description}</p>
-                                  {field.envVar && (
-                                    <p className="mt-0.5 text-xs text-gray-400">
-                                      Env: {field.envVar}
-                                    </p>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                <button
-                  onClick={completeSetup}
-                  disabled={loading}
-                  className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-                >
-                  {loading ? "Completing Setup..." : "Complete Setup"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 6: Complete */}
+          {/* Step 5: Complete */}
           {currentStep === "complete" && (
             <div className="text-center space-y-6 py-8">
               <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">

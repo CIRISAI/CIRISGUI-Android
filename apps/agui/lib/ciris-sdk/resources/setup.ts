@@ -87,8 +87,11 @@ export interface SetupCompleteRequest {
 
   // Dual Password System
   admin_username: string;
-  admin_password: string;
+  admin_password?: string | null; // Optional for OAuth users - server generates random password
   system_admin_password?: string | null;
+
+  // OAuth Authentication (optional)
+  oauth_provider?: string | null; // 'google', etc. - if set, admin_password is optional
 
   // Application Configuration
   agent_port: number;

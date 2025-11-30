@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { loadStripe, Stripe, StripeElements } from "@stripe/stripe-js";
-import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { CIRISClient } from "@/lib/ciris-sdk";
 
 // Types
@@ -20,32 +18,56 @@ interface CreditStatus {
   };
 }
 
-interface PurchaseResponse {
-  payment_id: string;
-  client_secret: string;
-  amount_minor: number;
-  currency: string;
-  uses_purchased: number;
-  publishable_key: string;
+// Google Play product configuration (matches BillingManager.kt)
+interface GooglePlayProduct {
+  productId: string;
+  credits: number;
+  price: string;
+  priceMinor: number;
+  description: string;
 }
 
-type PurchaseStep = "prompt" | "payment" | "processing" | "success" | "error";
-
-// Stripe Elements appearance configuration
-const stripeElementsOptions = {
-  appearance: {
-    theme: "stripe" as const,
-    variables: {
-      colorPrimary: "#3B82F6",
-      colorBackground: "#FFFFFF",
-      colorText: "#1F2937",
-      colorDanger: "#EF4444",
-      fontFamily: "Inter, system-ui, sans-serif",
-      spacingUnit: "4px",
-      borderRadius: "8px",
-    },
+const GOOGLE_PLAY_PRODUCTS: GooglePlayProduct[] = [
+  {
+    productId: "credits_100",
+    credits: 100,
+    price: "$4.99",
+    priceMinor: 499,
+    description: "100 CIRIS credits",
   },
-};
+  {
+    productId: "credits_250",
+    credits: 250,
+    price: "$9.99",
+    priceMinor: 999,
+    description: "250 CIRIS credits - Best Value!",
+  },
+  {
+    productId: "credits_600",
+    credits: 600,
+    price: "$19.99",
+    priceMinor: 1999,
+    description: "600 CIRIS credits - Most Popular!",
+  },
+];
+
+type PurchaseStep = "prompt" | "processing" | "success" | "error";
+
+// Detect if running on Android native app
+function isNativeAndroidApp(): boolean {
+  if (typeof window === "undefined") return false;
+
+  try {
+    const nativeAuth = localStorage.getItem("ciris_native_auth");
+    if (nativeAuth) {
+      const parsed = JSON.parse(nativeAuth);
+      return parsed.isNativeApp === true;
+    }
+    return localStorage.getItem("isNativeApp") === "true";
+  } catch {
+    return false;
+  }
+}
 
 // Credit Balance Component
 function CreditBalance({
@@ -99,12 +121,6 @@ function CreditBalance({
             {isLow && !isFree && "Running low! Purchase more to avoid interruptions"}
             {!isEmpty && !isLow && !isFree && "Click to purchase more"}
           </p>
-          {credits.purchase_options && (
-            <p className="text-sm font-medium mt-2">
-              💰 {credits.purchase_options.uses} uses for $
-              {(credits.purchase_options.price_minor / 100).toFixed(2)}
-            </p>
-          )}
         </div>
         {(isEmpty || isLow) && (
           <button className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
@@ -116,112 +132,54 @@ function CreditBalance({
   );
 }
 
-// Payment Form Component (uses Stripe Elements)
-function PaymentForm({
-  purchaseInfo,
-  onSuccess,
-  onError,
-  onCancel,
+// Google Play Product Card Component
+function ProductCard({
+  product,
+  onPurchase,
+  isPopular,
 }: {
-  purchaseInfo: PurchaseResponse;
-  onSuccess: (paymentId: string) => void;
-  onError: (error: string) => void;
-  onCancel: () => void;
+  product: GooglePlayProduct;
+  onPurchase: (productId: string) => void;
+  isPopular?: boolean;
 }) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const [processing, setProcessing] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!stripe || !elements) {
-      return;
-    }
-
-    const cardElement = elements.getElement(CardElement);
-    if (!cardElement) {
-      return;
-    }
-
-    setProcessing(true);
-
-    try {
-      const { error, paymentIntent } = await stripe.confirmCardPayment(purchaseInfo.client_secret, {
-        payment_method: {
-          card: cardElement,
-        },
-      });
-
-      if (error) {
-        onError(error.message || "Payment failed");
-      } else if (paymentIntent?.status === "succeeded" || paymentIntent?.status === "processing") {
-        // Payment confirmed by Stripe, now poll backend for credit addition
-        onSuccess(purchaseInfo.payment_id);
-      }
-    } catch (err) {
-      onError("An unexpected error occurred");
-    } finally {
-      setProcessing(false);
-    }
-  };
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div>
-        <h3 className="text-xl font-bold text-gray-900 mb-2">Payment Details</h3>
-        <p className="text-sm text-gray-600 mb-4">
-          {purchaseInfo.uses_purchased} uses for ${(purchaseInfo.amount_minor / 100).toFixed(2)}
-        </p>
-      </div>
-
-      <div className="border border-gray-300 rounded-lg p-4">
-        <CardElement
-          options={{
-            style: {
-              base: {
-                fontSize: "16px",
-                color: "#1F2937",
-                "::placeholder": {
-                  color: "#9CA3AF",
-                },
-              },
-              invalid: {
-                color: "#EF4444",
-                iconColor: "#EF4444",
-              },
-            },
-          }}
-        />
-      </div>
-
-      <div className="flex items-center gap-2 text-xs text-gray-500">
-        <span>🔒</span>
-        <span>Secure payment powered by Stripe</span>
-      </div>
-
-      <div className="flex gap-3">
+    <div
+      className={`relative border-2 rounded-xl p-6 transition-all hover:shadow-lg ${
+        isPopular
+          ? "border-blue-500 bg-gradient-to-br from-blue-50 to-white"
+          : "border-gray-200 bg-white hover:border-blue-300"
+      }`}
+    >
+      {isPopular && (
+        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+          <span className="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full">
+            MOST POPULAR
+          </span>
+        </div>
+      )}
+      <div className="text-center">
+        <div className="text-4xl font-bold text-gray-900 mb-2">{product.credits}</div>
+        <div className="text-gray-600 mb-4">credits</div>
+        <div className="text-3xl font-bold text-blue-600 mb-2">{product.price}</div>
+        <div className="text-sm text-gray-500 mb-4">
+          ${(product.priceMinor / product.credits / 100).toFixed(3)} per credit
+        </div>
         <button
-          type="submit"
-          disabled={!stripe || processing}
-          className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
+          onClick={() => onPurchase(product.productId)}
+          className={`w-full py-3 rounded-lg font-medium transition-colors ${
+            isPopular
+              ? "bg-blue-600 text-white hover:bg-blue-700"
+              : "bg-gray-100 text-gray-900 hover:bg-gray-200"
+          }`}
         >
-          {processing ? "Processing..." : `Pay $${(purchaseInfo.amount_minor / 100).toFixed(2)}`}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={processing}
-          className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors font-medium"
-        >
-          Cancel
+          Purchase
         </button>
       </div>
-    </form>
+    </div>
   );
 }
 
-// Purchase Modal Component
+// Purchase Modal Component for Android
 function PurchaseModal({
   isOpen,
   onClose,
@@ -235,148 +193,76 @@ function PurchaseModal({
 }) {
   const [step, setStep] = useState<PurchaseStep>("prompt");
   const [error, setError] = useState<string | null>(null);
-  const [purchaseInfo, setPurchaseInfo] = useState<PurchaseResponse | null>(null);
-  const [stripePromise, setStripePromise] = useState<Promise<Stripe | null> | null>(null);
-  const [creditsAdded, setCreditsAdded] = useState<number>(0);
+  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
 
-  const initiatePurchase = async () => {
-    setStep("payment");
-
-    try {
-      const client = new CIRISClient();
-      const data = await client.billing.initiatePurchase({
-        return_url: window.location.href,
-      });
-
-      setPurchaseInfo(data);
-      setStripePromise(loadStripe(data.publishable_key));
-    } catch (err) {
-      setError("Failed to initialize payment. Please try again.");
-      setStep("error");
-    }
-  };
-
-  const pollPaymentStatus = async (paymentId: string) => {
-    const maxAttempts = 30;
-    const pollInterval = 2000; // 2 seconds
-
-    for (let i = 0; i < maxAttempts; i++) {
-      try {
-        const client = new CIRISClient();
-        const status = await client.billing.getPurchaseStatus(paymentId);
-
-        if (status.status === "succeeded") {
-          // Success - credits added
-          setCreditsAdded(status.credits_added);
-          setStep("success");
-          setTimeout(() => {
-            onSuccess();
-            onClose();
-          }, 2000);
-          return;
-        }
-
-        if (status.status === "failed" || status.status === "canceled") {
-          // Payment failed
-          setError(`Payment ${status.status}. Please try again.`);
-          setStep("error");
-          return;
-        }
-
-        // Continue polling for processing/pending/requires_* states
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-      } catch (err) {
-        console.error("Error polling payment status:", err);
-        // Continue polling despite errors
-        await new Promise(resolve => setTimeout(resolve, pollInterval));
-      }
-    }
-
-    // Timeout after max attempts
-    setError(
-      "Payment status unknown after 60 seconds. Please check your credit balance or contact support."
-    );
-    setStep("error");
-  };
-
-  const handlePaymentSuccess = (paymentId: string) => {
+  const handlePurchase = (productId: string) => {
+    setSelectedProduct(productId);
     setStep("processing");
-    pollPaymentStatus(paymentId);
-  };
 
-  const handlePaymentError = (errorMessage: string) => {
-    setError(errorMessage);
-    setStep("error");
-  };
+    // Trigger native Google Play purchase via URL scheme
+    // The Android app intercepts this and launches PurchaseActivity
+    window.location.href = `ciris://purchase/${productId}`;
 
-  const handleRetry = () => {
-    setError(null);
-    setStep("prompt");
+    // Show processing state briefly, then return to prompt
+    // The native purchase flow will handle the actual transaction
+    setTimeout(() => {
+      setStep("prompt");
+      onClose();
+      // Refresh credits after a delay to pick up any completed purchases
+      setTimeout(() => {
+        onSuccess();
+      }, 2000);
+    }, 1000);
   };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-fade-in">
-        {/* Prompt Step */}
+      <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 animate-fade-in max-h-[90vh] overflow-y-auto">
+        {/* Prompt Step - Show Google Play Products */}
         {step === "prompt" && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Continue with CIRIS</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Purchase Credits</h2>
               <p className="text-gray-600 mt-2">
                 {credits?.free_uses_remaining === 0
-                  ? "You've used your 3 free tries! Purchase more to continue."
-                  : "Purchase more uses to continue using CIRIS."}
+                  ? "You've used your free tries! Purchase credits to continue."
+                  : "Choose a credit package to continue using CIRIS."}
               </p>
             </div>
 
-            {credits?.purchase_options && (
-              <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4">
-                <div className="text-center">
-                  <p className="text-3xl font-bold text-blue-600">
-                    ${(credits.purchase_options.price_minor / 100).toFixed(2)}
-                  </p>
-                  <p className="text-gray-700 mt-1">for {credits.purchase_options.uses} uses</p>
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              <button
-                onClick={initiatePurchase}
-                className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-              >
-                Purchase {credits?.purchase_options?.uses || 20} uses
-              </button>
-              <button
-                onClick={onClose}
-                className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
-              >
-                Not now
-              </button>
+            <div className="space-y-4">
+              {GOOGLE_PLAY_PRODUCTS.map(product => (
+                <ProductCard
+                  key={product.productId}
+                  product={product}
+                  onPurchase={handlePurchase}
+                  isPopular={product.productId === "credits_600"}
+                />
+              ))}
             </div>
-          </div>
-        )}
 
-        {/* Payment Step */}
-        {step === "payment" && stripePromise && purchaseInfo && (
-          <Elements stripe={stripePromise} options={stripeElementsOptions}>
-            <PaymentForm
-              purchaseInfo={purchaseInfo}
-              onSuccess={handlePaymentSuccess}
-              onError={handlePaymentError}
-              onCancel={onClose}
-            />
-          </Elements>
+            <div className="flex items-center gap-2 text-xs text-gray-500 justify-center">
+              <span>🔒</span>
+              <span>Secure payment via Google Play</span>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="w-full px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+            >
+              Not now
+            </button>
+          </div>
         )}
 
         {/* Processing Step */}
         {step === "processing" && (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto"></div>
-            <p className="text-gray-600 mt-4">Processing payment and adding credits...</p>
-            <p className="text-gray-500 text-sm mt-2">This may take a few moments</p>
+            <p className="text-gray-600 mt-4">Opening Google Play...</p>
+            <p className="text-gray-500 text-sm mt-2">Complete your purchase in the dialog</p>
           </div>
         )}
 
@@ -385,9 +271,7 @@ function PurchaseModal({
           <div className="text-center py-8">
             <div className="text-6xl mb-4">✓</div>
             <h3 className="text-2xl font-bold text-green-600 mb-2">Purchase Successful!</h3>
-            <p className="text-gray-700">
-              {creditsAdded} {creditsAdded === 1 ? "use" : "uses"} added to your account
-            </p>
+            <p className="text-gray-700">Credits have been added to your account</p>
           </div>
         )}
 
@@ -396,12 +280,15 @@ function PurchaseModal({
           <div className="text-center py-8 space-y-6">
             <div className="text-6xl text-red-500">✕</div>
             <div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">Payment Failed</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">Purchase Failed</h3>
               <p className="text-gray-600">{error}</p>
             </div>
             <div className="flex gap-3">
               <button
-                onClick={handleRetry}
+                onClick={() => {
+                  setError(null);
+                  setStep("prompt");
+                }}
                 className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
               >
                 Try Again
@@ -413,12 +300,6 @@ function PurchaseModal({
                 Cancel
               </button>
             </div>
-            <p className="text-sm text-gray-500">
-              Need help?{" "}
-              <a href="/support" className="text-blue-600 hover:underline">
-                Contact support
-              </a>
-            </p>
           </div>
         )}
       </div>
@@ -432,6 +313,7 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [isAndroid, setIsAndroid] = useState(false);
   const [client] = useState(() => new CIRISClient());
 
   const loadCredits = async () => {
@@ -451,7 +333,27 @@ export default function BillingPage() {
 
   useEffect(() => {
     loadCredits();
+    setIsAndroid(isNativeAndroidApp());
+
+    // Listen for purchase completion events from native app
+    const handlePurchaseComplete = (event: CustomEvent) => {
+      console.log("Purchase complete event received:", event.detail);
+      loadCredits(); // Refresh credits after purchase
+    };
+
+    window.addEventListener("ciris_purchase_complete", handlePurchaseComplete as EventListener);
+    return () => {
+      window.removeEventListener(
+        "ciris_purchase_complete",
+        handlePurchaseComplete as EventListener
+      );
+    };
   }, []);
+
+  const handlePurchaseClick = (productId: string) => {
+    // Trigger native Google Play purchase via URL scheme
+    window.location.href = `ciris://purchase/${productId}`;
+  };
 
   const handlePurchaseSuccess = () => {
     loadCredits();
@@ -464,6 +366,7 @@ export default function BillingPage() {
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900">Billing</h1>
           <p className="text-gray-600 mt-2">Manage your CIRIS credits and purchases</p>
+          {isAndroid && <p className="text-sm text-blue-600 mt-1">Powered by Google Play</p>}
         </div>
 
         {/* Loading State */}
@@ -519,39 +422,29 @@ export default function BillingPage() {
               </div>
             </div>
 
-            {/* Purchase Options */}
-            {credits.purchase_options && (
-              <div className="bg-white border border-gray-200 rounded-lg p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Purchase More Uses</h2>
-                <div className="bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 rounded-lg p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-3xl font-bold text-blue-600">
-                        ${(credits.purchase_options.price_minor / 100).toFixed(2)}
-                      </p>
-                      <p className="text-gray-700 mt-1">
-                        Get {credits.purchase_options.uses} additional uses
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => setShowPurchaseModal(true)}
-                      className="px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium text-lg"
-                    >
-                      Purchase Now
-                    </button>
-                  </div>
-                </div>
+            {/* Purchase Options - Google Play Products */}
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Purchase Credits</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {GOOGLE_PLAY_PRODUCTS.map(product => (
+                  <ProductCard
+                    key={product.productId}
+                    product={product}
+                    onPurchase={handlePurchaseClick}
+                    isPopular={product.productId === "credits_600"}
+                  />
+                ))}
               </div>
-            )}
+            </div>
 
             {/* Information */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h3 className="font-bold text-blue-900 mb-2">💡 About Credits</h3>
+              <h3 className="font-bold text-blue-900 mb-2">About Credits</h3>
               <ul className="text-sm text-blue-800 space-y-1">
                 <li>• Each interaction with CIRIS uses one credit</li>
                 <li>• Free tries are provided to new users</li>
                 <li>• Purchased credits never expire</li>
-                <li>• Secure payments processed by Stripe</li>
+                <li>• Secure payments via Google Play</li>
               </ul>
             </div>
           </div>

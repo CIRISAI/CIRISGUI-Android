@@ -11,6 +11,5 @@ export * from "./telemetry";
 export * from "./wise-authority";
 export * from "./emergency";
 export * from "./users";
-export * from "./manager";
 export * from "./billing";
 export * from "./setup";

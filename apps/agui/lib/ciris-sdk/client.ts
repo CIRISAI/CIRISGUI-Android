@@ -11,7 +11,6 @@ import { TelemetryResource } from "./resources/telemetry";
 import { WiseAuthorityResource } from "./resources/wise-authority";
 import { EmergencyResource } from "./resources/emergency";
 import { UsersResource } from "./resources/users";
-import { ManagerResource } from "./resources/manager";
 import { ConsentResource } from "./resources/consent";
 import { DSARResource } from "./resources/dsar";
 import { BillingResource } from "./resources/billing";
@@ -41,7 +40,6 @@ export class CIRISClient {
   public readonly wiseAuthority: WiseAuthorityResource;
   public readonly emergency: EmergencyResource;
   public readonly users: UsersResource;
-  public readonly manager: ManagerResource;
   public readonly consent: ConsentResource;
   public readonly dsar: DSARResource;
   public readonly billing: BillingResource;
@@ -93,7 +91,6 @@ export class CIRISClient {
     this.wiseAuthority = new WiseAuthorityResource(this.transport);
     this.emergency = new EmergencyResource(this.transport);
     this.users = new UsersResource(this.transport);
-    this.manager = new ManagerResource(this.transport);
     this.consent = new ConsentResource(this.transport);
     this.dsar = new DSARResource(this.transport);
     this.billing = new BillingResource(this.transport);
