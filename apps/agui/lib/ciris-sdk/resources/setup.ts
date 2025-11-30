@@ -92,6 +92,8 @@ export interface SetupCompleteRequest {
 
   // OAuth Authentication (optional)
   oauth_provider?: string | null; // 'google', etc. - if set, admin_password is optional
+  oauth_external_id?: string | null; // Google user ID for OAuth linking
+  oauth_email?: string | null; // OAuth user email
 
   // Application Configuration
   agent_port: number;

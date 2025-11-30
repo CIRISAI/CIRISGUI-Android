@@ -248,9 +248,16 @@ export default function SetupWizard() {
       console.log("[Setup]   llm_base_url:", finalBaseUrl);
       console.log("[Setup]   llm_model:", finalModel);
 
-      // Get auth method from localStorage
+      // Get auth method and OAuth details from localStorage
       const authMethod = localStorage.getItem("ciris_auth_method");
       const oauthProvider = authMethod === "google" ? "google" : null;
+      const oauthExternalId = localStorage.getItem("ciris_google_user_id") || null;
+      const oauthEmail = localStorage.getItem("ciris_google_email") || null;
+
+      console.log("[Setup] OAuth details:");
+      console.log("[Setup]   oauthProvider:", oauthProvider);
+      console.log("[Setup]   oauthExternalId:", oauthExternalId);
+      console.log("[Setup]   oauthEmail:", oauthEmail);
 
       const config: SetupCompleteRequest = {
         llm_provider: finalProvider,
@@ -269,6 +276,8 @@ export default function SetupWizard() {
         admin_password: password || null, // Optional for OAuth users
         system_admin_password: adminPassword || null, // Update default admin password (optional)
         oauth_provider: oauthProvider, // Tell server this is an OAuth user
+        oauth_external_id: oauthExternalId, // Google user ID for OAuth linking
+        oauth_email: oauthEmail, // OAuth user email
         agent_port: 8080,
       };
 
