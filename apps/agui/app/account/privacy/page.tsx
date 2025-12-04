@@ -188,6 +188,42 @@ function PrivacyPageContent() {
           {/* Privacy overview */}
           <div className="mb-8 bg-white rounded-lg shadow p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Privacy & Data Rights</h2>
+
+            {/* Local data note */}
+            <div className="mb-4 flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-md px-4 py-3">
+              <svg
+                className="h-5 w-5 text-blue-500 flex-shrink-0 mt-0.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <div className="text-sm text-blue-800">
+                <p className="font-medium mb-1">About Your Local Data</p>
+                <p>
+                  This page governs data stored locally on this agent instance. Users you have added
+                  to the system can use these controls to manage or remove their data. No data is
+                  sent off-device to CIRIS L3C except as described in our{" "}
+                  <a
+                    href="https://ciris.ai/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline hover:text-blue-900"
+                  >
+                    privacy policy
+                  </a>
+                  —specifically for billing and LLM services, which operate under zero data
+                  retention policies.
+                </p>
+              </div>
+            </div>
+
             <p className="text-gray-600 mb-4">
               Under GDPR and other privacy regulations, you have specific rights regarding your
               personal data. Use the Data Subject Access Request (DSAR) system to exercise these
