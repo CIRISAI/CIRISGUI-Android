@@ -11,7 +11,8 @@ import type {
 import LogoIcon from "../../components/ui/floating/LogoIcon";
 import toast from "react-hot-toast";
 
-type Step = "welcome" | "llm" | "users" | "template" | "complete";
+// Simplified wizard for Android: no template selection (force ally), auto-generate admin password for OAuth
+type Step = "welcome" | "llm" | "users" | "complete";
 
 export default function SetupWizard() {
   const router = useRouter();
@@ -55,7 +56,8 @@ export default function SetupWizard() {
   // Check if using CIRIS proxy (affects LLM configuration)
   const useCirisProxy = llmChoice === "ciris_key";
 
-  const [selectedTemplate, setSelectedTemplate] = useState("ally");
+  // Force "ally" template for Android app - no user selection
+  const selectedTemplate = "ally";
 
   // Helper to read native app state from localStorage
   const readNativeAppState = () => {
@@ -195,7 +197,9 @@ export default function SetupWizard() {
     console.log("[Setup]   ciris_llm_choice:", localStorage.getItem("ciris_llm_choice"));
     console.log("[Setup]   isNativeApp:", localStorage.getItem("isNativeApp"));
 
-    if (adminPassword !== adminPasswordConfirm) {
+    // For OAuth users, admin password is auto-generated (no validation needed)
+    // For non-OAuth users, validate admin password
+    if (!isGoogleAuth && adminPassword !== adminPasswordConfirm) {
       toast.error("Admin passwords do not match");
       return;
     }
@@ -208,6 +212,17 @@ export default function SetupWizard() {
     if (!llmValid && !useCirisProxy) {
       toast.error("Please validate your LLM configuration first");
       return;
+    }
+
+    // Generate random admin password for OAuth users (they won't need it)
+    let finalAdminPassword = adminPassword;
+    if (isGoogleAuth && !adminPassword) {
+      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+      finalAdminPassword = "";
+      for (let i = 0; i < 32; i++) {
+        finalAdminPassword += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      console.log("[Setup] Auto-generated secure random admin password for OAuth user");
     }
 
     setLoading(true);
@@ -274,7 +289,7 @@ export default function SetupWizard() {
         // For OAuth users, username/password may be empty - server generates random password
         admin_username: username || (oauthProvider ? `oauth_${oauthProvider}_user` : "admin"),
         admin_password: password || null, // Optional for OAuth users
-        system_admin_password: adminPassword || null, // Update default admin password (optional)
+        system_admin_password: finalAdminPassword || null, // Update default admin password (auto-generated for OAuth)
         oauth_provider: oauthProvider, // Tell server this is an OAuth user
         oauth_external_id: oauthExternalId, // Google user ID for OAuth linking
         oauth_email: oauthEmail, // OAuth user email
@@ -333,29 +348,27 @@ export default function SetupWizard() {
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Welcome to CIRIS</h1>
         </div>
 
-        {/* Progress indicator */}
+        {/* Progress indicator - simplified to 3 steps (no template selection) */}
         {currentStep !== "complete" && (
           <div className="mb-8">
             <div className="flex items-center justify-center space-x-2 sm:space-x-4">
-              {["welcome", "llm", "users", "template"].map((step, idx) => (
+              {["welcome", "llm", "users"].map((step, idx) => (
                 <div key={step} className="flex items-center">
                   <div
                     className={`flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full text-sm sm:text-base ${
                       currentStep === step
                         ? "bg-indigo-600 text-white"
-                        : idx < ["welcome", "llm", "users", "template"].indexOf(currentStep)
+                        : idx < ["welcome", "llm", "users"].indexOf(currentStep)
                           ? "bg-green-500 text-white"
                           : "bg-gray-200 text-gray-500"
                     }`}
                   >
-                    {idx < ["welcome", "llm", "users", "template"].indexOf(currentStep)
-                      ? "✓"
-                      : idx + 1}
+                    {idx < ["welcome", "llm", "users"].indexOf(currentStep) ? "✓" : idx + 1}
                   </div>
-                  {idx < 3 && (
+                  {idx < 2 && (
                     <div
                       className={`w-8 sm:w-16 h-1 ${
-                        idx < ["welcome", "llm", "users", "template"].indexOf(currentStep)
+                        idx < ["welcome", "llm", "users"].indexOf(currentStep)
                           ? "bg-green-500"
                           : "bg-gray-200"
                       }`}
@@ -794,7 +807,9 @@ export default function SetupWizard() {
           {currentStep === "users" && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-900">Create Your Accounts</h2>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {isGoogleAuth ? "Confirm Setup" : "Create Your Accounts"}
+                </h2>
                 <button
                   onClick={() => setCurrentStep("llm")}
                   className="text-gray-500 hover:text-gray-700"
@@ -803,94 +818,132 @@ export default function SetupWizard() {
                 </button>
               </div>
 
-              <p className="text-gray-600">
-                {isGoogleAuth
-                  ? "Set a secure password for the default admin account. Your Google account will be used for personal access."
-                  : "First, set a secure password for the default admin account. Then create your personal user account."}
-              </p>
-
-              {/* Admin Password */}
-              <div className="border-b border-gray-200 pb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Admin Account</h3>
+              {/* For OAuth users: auto-generate admin password and show confirmation */}
+              {isGoogleAuth ? (
                 <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label
-                        htmlFor="adminPassword"
-                        className="block text-sm font-medium text-gray-700"
-                      >
-                        New Admin Password{" "}
-                        <span className="text-xs text-gray-500">(min 8 characters)</span>
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          // Generate a random 16-character password
-                          const chars =
-                            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
-                          let randomPassword = "";
-                          for (let i = 0; i < 16; i++) {
-                            randomPassword += chars.charAt(
-                              Math.floor(Math.random() * chars.length)
-                            );
-                          }
-                          setAdminPassword(randomPassword);
-                          setAdminPasswordConfirm(randomPassword);
-                          setAdminPasswordError(null);
-                          // Copy to clipboard
-                          navigator.clipboard
-                            .writeText(randomPassword)
-                            .then(() => {
-                              toast.success("Random password generated and copied to clipboard!");
-                            })
-                            .catch(() => {
-                              toast.success(`Random password generated: ${randomPassword}`);
-                            });
-                        }}
-                        className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-                      >
-                        Generate Random
-                      </button>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-green-600 text-xl">✓</span>
+                      <span className="font-semibold text-green-900">Google Account Connected</span>
                     </div>
-                    <input
-                      id="adminPassword"
-                      type="password"
-                      value={adminPassword}
-                      onChange={e => {
-                        setAdminPassword(e.target.value);
-                        if (e.target.value.length > 0 && e.target.value.length < 8) {
-                          setAdminPasswordError("Password must be at least 8 characters");
-                        } else {
-                          setAdminPasswordError(null);
-                        }
-                      }}
-                      className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-                        adminPasswordError ? "border-red-500" : "border-gray-300"
-                      }`}
-                      placeholder="Enter a secure password (min 8 chars)"
-                    />
-                    {adminPasswordError && (
-                      <p className="mt-1 text-sm text-red-600">{adminPasswordError}</p>
-                    )}
+                    <p className="text-sm text-green-800">
+                      You'll sign in to CIRIS using your Google account. A secure random password
+                      will be generated for the admin account (you won't need to use it).
+                    </p>
                   </div>
-                  <div>
-                    <label
-                      htmlFor="adminPasswordConfirm"
-                      className="block text-sm font-medium text-gray-700 mb-2"
-                    >
-                      Confirm Admin Password
-                    </label>
-                    <input
-                      id="adminPasswordConfirm"
-                      type="password"
-                      value={adminPasswordConfirm}
-                      onChange={e => setAdminPasswordConfirm(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="Re-enter password"
-                    />
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="font-semibold text-blue-900 mb-2">Setup Summary</h3>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>
+                        • <strong>LLM:</strong>{" "}
+                        {useCirisProxy ? "CIRIS Key (Google-linked)" : "Your own API key"}
+                      </li>
+                      <li>
+                        • <strong>Agent Template:</strong> Ally (Default Assistant)
+                      </li>
+                      <li>
+                        • <strong>Authentication:</strong> Google Sign-In
+                      </li>
+                      <li>
+                        • <strong>Admin Password:</strong> Auto-generated (secure random)
+                      </li>
+                    </ul>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <p className="text-gray-600">
+                    First, set a secure password for the default admin account. Then create your
+                    personal user account.
+                  </p>
+
+                  {/* Admin Password - only for non-OAuth users */}
+                  <div className="border-b border-gray-200 pb-6">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Admin Account</h3>
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label
+                            htmlFor="adminPassword"
+                            className="block text-sm font-medium text-gray-700"
+                          >
+                            New Admin Password{" "}
+                            <span className="text-xs text-gray-500">(min 8 characters)</span>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Generate a random 16-character password
+                              const chars =
+                                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+                              let randomPassword = "";
+                              for (let i = 0; i < 16; i++) {
+                                randomPassword += chars.charAt(
+                                  Math.floor(Math.random() * chars.length)
+                                );
+                              }
+                              setAdminPassword(randomPassword);
+                              setAdminPasswordConfirm(randomPassword);
+                              setAdminPasswordError(null);
+                              // Copy to clipboard
+                              navigator.clipboard
+                                .writeText(randomPassword)
+                                .then(() => {
+                                  toast.success(
+                                    "Random password generated and copied to clipboard!"
+                                  );
+                                })
+                                .catch(() => {
+                                  toast.success(`Random password generated: ${randomPassword}`);
+                                });
+                            }}
+                            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
+                          >
+                            Generate Random
+                          </button>
+                        </div>
+                        <input
+                          id="adminPassword"
+                          type="password"
+                          value={adminPassword}
+                          onChange={e => {
+                            setAdminPassword(e.target.value);
+                            if (e.target.value.length > 0 && e.target.value.length < 8) {
+                              setAdminPasswordError("Password must be at least 8 characters");
+                            } else {
+                              setAdminPasswordError(null);
+                            }
+                          }}
+                          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                            adminPasswordError ? "border-red-500" : "border-gray-300"
+                          }`}
+                          placeholder="Enter a secure password (min 8 chars)"
+                        />
+                        {adminPasswordError && (
+                          <p className="mt-1 text-sm text-red-600">{adminPasswordError}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="adminPasswordConfirm"
+                          className="block text-sm font-medium text-gray-700 mb-2"
+                        >
+                          Confirm Admin Password
+                        </label>
+                        <input
+                          id="adminPasswordConfirm"
+                          type="password"
+                          value={adminPasswordConfirm}
+                          onChange={e => setAdminPasswordConfirm(e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                          placeholder="Re-enter password"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* User Account - Only shown for non-Google OAuth users */}
               {showLocalUserFields && (
@@ -976,12 +1029,15 @@ export default function SetupWizard() {
               )}
 
               <button
-                onClick={() => setCurrentStep("template")}
+                onClick={completeSetup}
                 disabled={
-                  // Admin password is ALWAYS required (min 8 chars, must match)
-                  !adminPassword ||
-                  adminPassword.length < 8 ||
-                  adminPassword !== adminPasswordConfirm ||
+                  loading ||
+                  // For OAuth users: admin password is auto-generated, no validation needed
+                  // For non-OAuth users: admin password required (min 8 chars, must match)
+                  (!isGoogleAuth &&
+                    (!adminPassword ||
+                      adminPassword.length < 8 ||
+                      adminPassword !== adminPasswordConfirm)) ||
                   // Only require local user account for non-Google OAuth users
                   (showLocalUserFields &&
                     (!username ||
@@ -992,111 +1048,12 @@ export default function SetupWizard() {
                 }
                 className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
               >
-                Continue to Template Selection →
+                {loading ? "Completing Setup..." : "Complete Setup"}
               </button>
             </div>
           )}
 
-          {/* Step 4: Template Selection */}
-          {currentStep === "template" && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-900">Choose Your Agent Template</h2>
-                <button
-                  onClick={() => setCurrentStep("users")}
-                  className="text-gray-500 hover:text-gray-700"
-                >
-                  ← Back
-                </button>
-              </div>
-
-              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 sm:p-5 mb-2">
-                <h3 className="text-sm font-semibold text-indigo-900 mb-2">
-                  How CIRIS Agent Templates Work
-                </h3>
-                <p className="text-sm text-indigo-800 leading-relaxed">
-                  Each template contains Standard Operating Procedures (SOPs) that define your
-                  agent's role and capabilities. CIRIS agents are mission-driven—their conscience
-                  system validates every action against their defined mission to ensure ethical,
-                  aligned behavior. For multi-stage workflows, agents use tickets to track progress
-                  through each step of their SOPs, automatically generating tasks as work continues.
-                </p>
-              </div>
-
-              {/* Complete Setup Button - at top for easy access */}
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                <button
-                  onClick={completeSetup}
-                  disabled={loading}
-                  className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-                >
-                  {loading ? "Completing Setup..." : "Complete Setup"}
-                </button>
-              </div>
-
-              {/* Available Templates */}
-              <div className="space-y-3">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Available Templates</h3>
-                {templates.length === 0 ? (
-                  <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-gray-200">
-                    <p className="text-gray-500">Loading templates...</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-3">
-                    {templates.map(template => (
-                      <button
-                        key={template.id}
-                        onClick={() => setSelectedTemplate(template.id)}
-                        className={`p-4 sm:p-5 border-2 rounded-lg text-left transition-all ${
-                          selectedTemplate === template.id
-                            ? "border-indigo-600 bg-indigo-50"
-                            : "border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="text-base sm:text-lg font-semibold text-gray-900">
-                                {template.name}
-                              </h4>
-                              <span
-                                className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                                  template.stewardship_tier <= 2
-                                    ? "bg-green-100 text-green-800"
-                                    : template.stewardship_tier <= 3
-                                      ? "bg-yellow-100 text-yellow-800"
-                                      : "bg-orange-100 text-orange-800"
-                                }`}
-                                title={`Stewardship Tier ${template.stewardship_tier}/5`}
-                              >
-                                Tier {template.stewardship_tier}
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600 mt-1">{template.description}</p>
-                            {template.example_use_cases &&
-                              template.example_use_cases.length > 0 && (
-                                <div className="mt-2">
-                                  <p className="text-xs text-gray-500 font-medium">Use Cases:</p>
-                                  <p className="text-xs text-gray-600">
-                                    {template.example_use_cases.slice(0, 2).join(", ")}
-                                    {template.example_use_cases.length > 2 && "..."}
-                                  </p>
-                                </div>
-                              )}
-                          </div>
-                          {selectedTemplate === template.id && (
-                            <span className="text-indigo-600 text-xl flex-shrink-0">✓</span>
-                          )}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Step 5: Complete */}
+          {/* Step 4: Complete */}
           {currentStep === "complete" && (
             <div className="text-center space-y-6 py-8">
               <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto">
@@ -1123,9 +1080,27 @@ export default function SetupWizard() {
                   // Native app users are already authenticated, go to main app
                   // Non-native users need to login first
                   if (actuallyNativeApp || isNativeApp) {
-                    console.log("[Setup Complete] Navigating to / (native app mode)");
-                    // Use window.location for reliable WebView navigation
-                    window.location.href = "/";
+                    console.log(
+                      "[Setup Complete] Native app mode - refreshing token for updated role"
+                    );
+                    // Tell the native app to refresh the token to get updated role (ADMIN after setup)
+                    const win = window as unknown as {
+                      CIRISNative?: { refreshToken?: () => void };
+                    };
+                    if (typeof win.CIRISNative !== "undefined" && win.CIRISNative.refreshToken) {
+                      console.log("[Setup Complete] Calling CIRISNative.refreshToken()");
+                      win.CIRISNative.refreshToken();
+                      // Give the token refresh a moment to complete before navigating
+                      setTimeout(() => {
+                        console.log("[Setup Complete] Navigating to / after token refresh");
+                        window.location.href = "/";
+                      }, 1000);
+                    } else {
+                      console.log(
+                        "[Setup Complete] CIRISNative.refreshToken not available, navigating directly"
+                      );
+                      window.location.href = "/";
+                    }
                   } else {
                     console.log("[Setup Complete] Navigating to /login (browser mode)");
                     router.push("/login");
