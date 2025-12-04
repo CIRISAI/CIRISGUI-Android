@@ -1,12 +1,12 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { cirisClient } from '../../lib/ciris-sdk';
-import { GraphNode } from '../../lib/ciris-sdk/types';
-import toast from 'react-hot-toast';
-import { debounce } from 'lodash';
-import { SpinnerIcon } from '../../components/Icons';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { cirisClient } from "../../lib/ciris-sdk";
+import { GraphNode } from "../../lib/ciris-sdk/types";
+import toast from "react-hot-toast";
+import { debounce } from "lodash";
+import { SpinnerIcon } from "../../components/Icons";
 
 interface MemoryStats {
   total_nodes: number;
@@ -18,23 +18,23 @@ interface MemoryStats {
   newest_node: string;
 }
 
-const NODE_TYPES = ['concept', 'observation', 'identity', 'config', 'tsdb_data', 'audit_entry'];
+const NODE_TYPES = ["concept", "observation", "identity", "config", "tsdb_data", "audit_entry"];
 const SCOPES = [
-  { value: 'local', label: 'LOCAL' },
-  { value: 'identity', label: 'IDENTITY' },
-  { value: 'environment', label: 'ENVIRONMENT' },
-  { value: 'community', label: 'COMMUNITY' }
+  { value: "local", label: "LOCAL" },
+  { value: "identity", label: "IDENTITY" },
+  { value: "environment", label: "ENVIRONMENT" },
+  { value: "community", label: "COMMUNITY" },
 ];
-const LAYOUTS = ['force', 'timeline', 'hierarchical'] as const;
+const LAYOUTS = ["force", "timeline", "hierarchical"] as const;
 
 export default function MemoryPage() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingNode, setIsLoadingNode] = useState(false);
-  const [activeScope, setActiveScope] = useState<string>('local');
+  const [activeScope, setActiveScope] = useState<string>("local");
   const [activeNodeType, setActiveNodeType] = useState<string | null>(null);
-  const [graphLayout, setGraphLayout] = useState<'force' | 'timeline' | 'hierarchical'>('timeline');
+  const [graphLayout, setGraphLayout] = useState<"force" | "timeline" | "hierarchical">("timeline");
   const [timeRange, setTimeRange] = useState<number>(168);
   const [showVisualization, setShowVisualization] = useState(true);
   const [includeMetrics, setIncludeMetrics] = useState(false);
@@ -43,18 +43,30 @@ export default function MemoryPage() {
   const queryClient = useQueryClient();
 
   // Fetch visualization
-  const { data: svgContent, isLoading: vizLoading, refetch: refetchViz } = useQuery<string>({
-    queryKey: ['memory-visualization', activeScope, activeNodeType, graphLayout, timeRange, includeMetrics, maxNodes],
+  const {
+    data: svgContent,
+    isLoading: vizLoading,
+    refetch: refetchViz,
+  } = useQuery<string>({
+    queryKey: [
+      "memory-visualization",
+      activeScope,
+      activeNodeType,
+      graphLayout,
+      timeRange,
+      includeMetrics,
+      maxNodes,
+    ],
     queryFn: async () => {
       return await cirisClient.memory.getVisualization({
-        scope: activeScope as 'local' | 'identity' | 'environment' | 'community',
+        scope: activeScope as "local" | "identity" | "environment" | "community",
         node_type: activeNodeType || undefined,
         layout: graphLayout,
-        hours: graphLayout === 'timeline' ? timeRange : undefined,
+        hours: graphLayout === "timeline" ? timeRange : undefined,
         width: 1200,
         height: 600,
         limit: maxNodes,
-        include_metrics: includeMetrics
+        include_metrics: includeMetrics,
       });
     },
     enabled: showVisualization,
@@ -62,12 +74,12 @@ export default function MemoryPage() {
 
   // Search memory nodes
   const { data: searchResults, isLoading: searchLoading } = useQuery<GraphNode[]>({
-    queryKey: ['memory-search', searchQuery, activeScope, activeNodeType],
+    queryKey: ["memory-search", searchQuery, activeScope, activeNodeType],
     queryFn: async () => {
       const result = await cirisClient.memory.query(searchQuery, {
         limit: 1000,
         scope: activeScope,
-        type: activeNodeType || undefined
+        type: activeNodeType || undefined,
       });
       return result;
     },
@@ -76,21 +88,21 @@ export default function MemoryPage() {
 
   // Get node counts by type and scope
   const { data: nodeStats } = useQuery({
-    queryKey: ['memory-stats'],
+    queryKey: ["memory-stats"],
     queryFn: async () => {
       // Simulate stats by querying for each type
       const stats: Partial<MemoryStats> = {
         nodes_by_type: {},
         nodes_by_scope: {},
-        total_nodes: 0
+        total_nodes: 0,
       };
 
       // This is a simplified approach - ideally the API would provide these stats
       for (const nodeType of NODE_TYPES) {
         try {
-          const nodes = await cirisClient.memory.query('', {
+          const nodes = await cirisClient.memory.query("", {
             type: nodeType,
-            limit: 1
+            limit: 1,
           });
           stats.nodes_by_type![nodeType] = nodes.length;
           stats.total_nodes! += nodes.length;
@@ -126,7 +138,7 @@ export default function MemoryPage() {
       container.innerHTML = svgContent;
 
       // Create tooltip element
-      const tooltip = document.createElement('div');
+      const tooltip = document.createElement("div");
       tooltip.style.cssText = `
         position: absolute;
         background: rgba(0, 0, 0, 0.9);
@@ -144,15 +156,15 @@ export default function MemoryPage() {
       document.body.appendChild(tooltip);
 
       // Add click handlers to all circles (nodes)
-      const circles = container.querySelectorAll('circle');
+      const circles = container.querySelectorAll("circle");
       circles.forEach((circle, index) => {
-        circle.style.cursor = 'pointer';
-        const nodeId = circle.getAttribute('data-node-id');
+        circle.style.cursor = "pointer";
+        const nodeId = circle.getAttribute("data-node-id");
 
-        circle.addEventListener('click', async () => {
+        circle.addEventListener("click", async () => {
           if (nodeId) {
             // Clear existing search to force refresh
-            setSearchQuery('');
+            setSearchQuery("");
             // Small delay to ensure state update
             setTimeout(() => {
               setSearchQuery(nodeId);
@@ -162,13 +174,13 @@ export default function MemoryPage() {
         });
 
         // Show tooltip on hover
-        circle.addEventListener('mouseenter', (e) => {
-          circle.setAttribute('opacity', '1.0');
-          circle.style.filter = 'brightness(1.2)';
+        circle.addEventListener("mouseenter", e => {
+          circle.setAttribute("opacity", "1.0");
+          circle.style.filter = "brightness(1.2)";
 
           if (nodeId) {
             tooltip.textContent = `Click to query: ${nodeId}`;
-            tooltip.style.visibility = 'visible';
+            tooltip.style.visibility = "visible";
 
             const rect = (e.target as Element).getBoundingClientRect();
             tooltip.style.left = `${rect.left + rect.width / 2 - tooltip.offsetWidth / 2}px`;
@@ -176,10 +188,10 @@ export default function MemoryPage() {
           }
         });
 
-        circle.addEventListener('mouseleave', () => {
-          circle.setAttribute('opacity', '0.8');
-          circle.style.filter = 'none';
-          tooltip.style.visibility = 'hidden';
+        circle.addEventListener("mouseleave", () => {
+          circle.setAttribute("opacity", "0.8");
+          circle.style.filter = "none";
+          tooltip.style.visibility = "hidden";
         });
       });
 
@@ -196,23 +208,24 @@ export default function MemoryPage() {
   const loadNodeDetails = async (nodeId: string) => {
     setIsLoadingNode(true);
     try {
-      console.log('Loading node details for:', nodeId);
+      console.log("Loading node details for:", nodeId);
       // Use query endpoint with node_id for nodes with special characters
       const results = await cirisClient.memory.query(nodeId, { limit: 1 });
-      console.log('Query results:', results);
+      console.log("Query results:", results);
       if (results && results.length > 0) {
         setSelectedNode(results[0]);
-        toast.success('Node details loaded');
+        toast.success("Node details loaded");
       } else {
-        toast.error('Node not found');
+        toast.error("Node not found");
       }
     } catch (error: any) {
-      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to load node details';
+      const errorMessage =
+        error?.response?.data?.detail || error?.message || "Failed to load node details";
       toast.error(errorMessage);
-      console.error('Error loading node:', error);
-      console.error('Error details:', {
+      console.error("Error loading node:", error);
+      console.error("Error details:", {
         nodeId,
-        error: error?.response?.data || error
+        error: error?.response?.data || error,
       });
     } finally {
       setIsLoadingNode(false);
@@ -225,14 +238,14 @@ export default function MemoryPage() {
 
   const getNodeTypeColor = (nodeType: string) => {
     const colors: Record<string, string> = {
-      'concept': 'bg-orange-100 text-orange-800',
-      'observation': 'bg-pink-100 text-pink-800',
-      'identity': 'bg-indigo-100 text-indigo-800',
-      'config': 'bg-amber-100 text-amber-800',
-      'tsdb_data': 'bg-cyan-100 text-cyan-800',
-      'audit_entry': 'bg-gray-100 text-gray-800',
+      concept: "bg-orange-100 text-orange-800",
+      observation: "bg-pink-100 text-pink-800",
+      identity: "bg-indigo-100 text-indigo-800",
+      config: "bg-amber-100 text-amber-800",
+      tsdb_data: "bg-cyan-100 text-cyan-800",
+      audit_entry: "bg-gray-100 text-gray-800",
     };
-    return colors[nodeType.toLowerCase()] || 'bg-gray-100 text-gray-800';
+    return colors[nodeType.toLowerCase()] || "bg-gray-100 text-gray-800";
   };
 
   return (
@@ -244,6 +257,24 @@ export default function MemoryPage() {
           <p className="mt-2 text-gray-600">
             Visualize and explore the agent's memory graph with interactive node navigation
           </p>
+          <div className="mt-3 flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            <svg
+              className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <p className="text-sm text-amber-800">
+              Memory graph begins building 12-24 hours after first interaction
+            </p>
+          </div>
         </div>
       </div>
 
@@ -264,8 +295,8 @@ export default function MemoryPage() {
                     }}
                     className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
                       activeScope === scope.value
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        ? "bg-indigo-600 text-white"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
                     }`}
                   >
                     {scope.label}
@@ -279,8 +310,8 @@ export default function MemoryPage() {
               <label className="block text-sm font-medium text-gray-700 mb-2">Node Type</label>
               <select
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                value={activeNodeType || ''}
-                onChange={(e) => {
+                value={activeNodeType || ""}
+                onChange={e => {
                   setActiveNodeType(e.target.value || null);
                   refetchViz();
                 }}
@@ -288,7 +319,7 @@ export default function MemoryPage() {
                 <option value="">All Types</option>
                 {NODE_TYPES.map(type => (
                   <option key={type} value={type}>
-                    {type.replace('_', ' ').toUpperCase()}
+                    {type.replace("_", " ").toUpperCase()}
                   </option>
                 ))}
               </select>
@@ -300,7 +331,7 @@ export default function MemoryPage() {
               <select
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 value={graphLayout}
-                onChange={(e) => {
+                onChange={e => {
                   setGraphLayout(e.target.value as typeof graphLayout);
                   refetchViz();
                 }}
@@ -314,13 +345,13 @@ export default function MemoryPage() {
             </div>
 
             {/* Time Range (for timeline layout) */}
-            {graphLayout === 'timeline' && (
+            {graphLayout === "timeline" && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
                 <select
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                   value={timeRange}
-                  onChange={(e) => {
+                  onChange={e => {
                     setTimeRange(Number(e.target.value));
                     refetchViz();
                   }}
@@ -339,7 +370,7 @@ export default function MemoryPage() {
               <select
                 className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 value={maxNodes}
-                onChange={(e) => {
+                onChange={e => {
                   setMaxNodes(Number(e.target.value));
                   refetchViz();
                 }}
@@ -360,7 +391,7 @@ export default function MemoryPage() {
                 type="checkbox"
                 className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                 checked={includeMetrics}
-                onChange={(e) => {
+                onChange={e => {
                   setIncludeMetrics(e.target.checked);
                   refetchViz();
                 }}
@@ -394,7 +425,7 @@ export default function MemoryPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-medium text-gray-900">
               Memory Graph Visualization
-              {graphLayout === 'timeline' && ` - Last ${timeRange} hours`}
+              {graphLayout === "timeline" && ` - Last ${timeRange} hours`}
             </h2>
             <button
               onClick={() => refetchViz()}
@@ -414,7 +445,7 @@ export default function MemoryPage() {
             <div
               ref={svgContainerRef}
               className="w-full overflow-x-auto border border-gray-200 rounded-lg bg-gray-50 [&>svg]:w-full [&>svg]:h-auto [&>svg]:max-w-full"
-              style={{ minHeight: '400px' }}
+              style={{ minHeight: "400px" }}
             />
           )}
 
@@ -453,7 +484,7 @@ export default function MemoryPage() {
               Search Results ({searchResults.length})
             </h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {searchResults.map((node) => (
+              {searchResults.map(node => (
                 <div
                   key={node.id}
                   className="relative rounded-lg border border-gray-300 bg-white px-4 py-5 shadow-sm hover:border-gray-400 cursor-pointer transition-colors"
@@ -462,22 +493,23 @@ export default function MemoryPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between mb-2">
-                        <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${getNodeTypeColor(node.type)}`}>
+                        <span
+                          className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${getNodeTypeColor(node.type)}`}
+                        >
                           {node.type}
                         </span>
-                        <span className="text-xs text-gray-500">
-                          {node.scope}
-                        </span>
+                        <span className="text-xs text-gray-500">{node.scope}</span>
                       </div>
                       <p className="text-sm text-gray-900 line-clamp-3">
-                        {node.attributes.content || node.attributes.description || node.attributes.name || node.id}
+                        {node.attributes.content ||
+                          node.attributes.description ||
+                          node.attributes.name ||
+                          node.id}
                       </p>
                       <p className="mt-1 text-xs text-gray-500">
-                        {formatDate(node.attributes.created_at || node.updated_at || '')}
+                        {formatDate(node.attributes.created_at || node.updated_at || "")}
                       </p>
-                      <p className="mt-2 text-xs text-indigo-600">
-                        Click to view full details →
-                      </p>
+                      <p className="mt-2 text-xs text-indigo-600">Click to view full details →</p>
                     </div>
                   </div>
                 </div>
@@ -507,7 +539,12 @@ export default function MemoryPage() {
                 disabled={isLoadingNode}
               >
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
@@ -521,40 +558,48 @@ export default function MemoryPage() {
                     <div className="py-3 flex justify-between text-sm">
                       <dt className="text-gray-500">ID</dt>
                       <dd className="text-gray-900 font-mono text-xs">{selectedNode.id}</dd>
-                  </div>
-                  <div className="py-3 flex justify-between text-sm">
-                    <dt className="text-gray-500">Type</dt>
-                    <dd className="text-gray-900">
-                      <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${getNodeTypeColor(selectedNode.type)}`}>
-                        {selectedNode.type}
-                      </span>
-                    </dd>
-                  </div>
-                  <div className="py-3 flex justify-between text-sm">
-                    <dt className="text-gray-500">Scope</dt>
-                    <dd className="text-gray-900">{selectedNode.scope}</dd>
-                  </div>
-                  <div className="py-3 flex justify-between text-sm">
-                    <dt className="text-gray-500">Created</dt>
-                    <dd className="text-gray-900">{selectedNode.attributes?.created_at ? formatDate(selectedNode.attributes.created_at) : 'N/A'}</dd>
-                  </div>
-                  <div className="py-3 flex justify-between text-sm">
-                    <dt className="text-gray-500">Updated</dt>
-                    <dd className="text-gray-900">{selectedNode.updated_at ? formatDate(selectedNode.updated_at) : 'N/A'}</dd>
-                  </div>
-                </dl>
-              </div>
+                    </div>
+                    <div className="py-3 flex justify-between text-sm">
+                      <dt className="text-gray-500">Type</dt>
+                      <dd className="text-gray-900">
+                        <span
+                          className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${getNodeTypeColor(selectedNode.type)}`}
+                        >
+                          {selectedNode.type}
+                        </span>
+                      </dd>
+                    </div>
+                    <div className="py-3 flex justify-between text-sm">
+                      <dt className="text-gray-500">Scope</dt>
+                      <dd className="text-gray-900">{selectedNode.scope}</dd>
+                    </div>
+                    <div className="py-3 flex justify-between text-sm">
+                      <dt className="text-gray-500">Created</dt>
+                      <dd className="text-gray-900">
+                        {selectedNode.attributes?.created_at
+                          ? formatDate(selectedNode.attributes.created_at)
+                          : "N/A"}
+                      </dd>
+                    </div>
+                    <div className="py-3 flex justify-between text-sm">
+                      <dt className="text-gray-500">Updated</dt>
+                      <dd className="text-gray-900">
+                        {selectedNode.updated_at ? formatDate(selectedNode.updated_at) : "N/A"}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
 
-              {/* Node Properties */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-700">Properties</h4>
-                <div className="mt-2 bg-gray-50 rounded-lg p-4">
-                  <pre className="text-xs text-gray-900 whitespace-pre-wrap">
-                    {JSON.stringify(selectedNode.attributes, null, 2)}
-                  </pre>
+                {/* Node Properties */}
+                <div>
+                  <h4 className="text-sm font-medium text-gray-700">Properties</h4>
+                  <div className="mt-2 bg-gray-50 rounded-lg p-4">
+                    <pre className="text-xs text-gray-900 whitespace-pre-wrap">
+                      {JSON.stringify(selectedNode.attributes, null, 2)}
+                    </pre>
+                  </div>
                 </div>
               </div>
-            </div>
             )}
           </div>
         </div>
@@ -564,8 +609,18 @@ export default function MemoryPage() {
       {searchQuery && searchResults && searchResults.length === 0 && !searchLoading && (
         <div className="bg-white shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6 text-center">
-            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
             </svg>
             <h3 className="mt-2 text-sm font-medium text-gray-900">No results found</h3>
             <p className="mt-1 text-sm text-gray-500">
