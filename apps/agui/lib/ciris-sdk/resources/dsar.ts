@@ -1,9 +1,9 @@
 // CIRIS TypeScript SDK - DSAR (Data Subject Access Request) Resource
 
-import { BaseResource } from './base';
+import { BaseResource } from "./base";
 
 export interface DSARRequest {
-  request_type: 'access' | 'delete' | 'export' | 'correct';
+  request_type: "access" | "delete" | "export" | "correct";
   email: string;
   user_identifier?: string;
   details?: string;
@@ -38,7 +38,7 @@ export class DSARResource extends BaseResource {
    * Public endpoint - no authentication required
    */
   async submitRequest(data: DSARRequest): Promise<DSARResponse> {
-    return this.transport.post<DSARResponse>('/v1/dsr/submit', data, { skipAuth: true });
+    return this.transport.post<DSARResponse>("/v1/dsar/", data, { skipAuth: true });
   }
 
   /**
@@ -46,7 +46,7 @@ export class DSARResource extends BaseResource {
    * Public endpoint - requires ticket ID
    */
   async checkStatus(ticketId: string): Promise<DSARTicket> {
-    return this.transport.get<DSARTicket>(`/v1/dsr/status/${ticketId}`, { skipAuth: true });
+    return this.transport.get<DSARTicket>(`/v1/dsar/${ticketId}`, { skipAuth: true });
   }
 
   /**
@@ -54,7 +54,7 @@ export class DSARResource extends BaseResource {
    * Requires: ADMIN+ permissions
    */
   async listRequests(): Promise<DSARTicket[]> {
-    return this.transport.get<DSARTicket[]>('/v1/dsr/admin/requests');
+    return this.transport.get<DSARTicket[]>("/v1/dsar/");
   }
 
   /**
@@ -62,6 +62,9 @@ export class DSARResource extends BaseResource {
    * Requires: ADMIN+ permissions
    */
   async updateRequest(ticketId: string, status: string, response?: string): Promise<DSARTicket> {
-    return this.transport.put<DSARTicket>(`/v1/dsr/admin/requests/${ticketId}`, { status, response });
+    return this.transport.put<DSARTicket>(`/v1/dsar/${ticketId}/status`, {
+      new_status: status,
+      notes: response,
+    });
   }
 }
