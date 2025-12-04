@@ -191,15 +191,13 @@ function Navbar({ className }: { className?: string }) {
   );
 }
 export function Layout({ children }: LayoutProps) {
-  const { user, logout, hasRole } = useAuth();
-  const { currentAgent, currentAgentRole } = useAgent();
-  const router = useRouter();
-
+  // On Android, the native Kotlin toolbar handles navigation, so hide the web navbar
+  // and reduce top padding since there's no floating navbar
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar className="top-2 z-50" />
-      <main className=" container pt-10 sm:px-6 lg:px-8">
-        <div className=" pt-20 sm:px-6 lg:px-8">{children}</div>
+      {/* Navbar hidden on Android - native Kotlin toolbar provides navigation */}
+      <main className="container px-4 sm:px-6 lg:px-8">
+        <div className="pt-4 sm:px-6 lg:px-8">{children}</div>
       </main>
     </div>
   );
