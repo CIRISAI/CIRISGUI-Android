@@ -1,8 +1,8 @@
 // CIRIS TypeScript SDK - Authentication Store
 // Manages auth tokens with browser storage
 
-import { User } from './types';
-import Cookies from 'js-cookie';
+import { User } from "./types";
+import Cookies from "js-cookie";
 
 export interface AuthToken {
   access_token: string;
@@ -14,28 +14,28 @@ export interface AuthToken {
 }
 
 export class AuthStore {
-  private static readonly STORAGE_KEY = 'ciris_auth_token';
-  private static readonly USER_KEY = 'ciris_auth_user';
+  private static readonly STORAGE_KEY = "ciris_auth_token";
+  private static readonly USER_KEY = "ciris_auth_user";
 
   static saveToken(token: AuthToken): void {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       const tokenWithTimestamp = {
         ...token,
-        created_at: Date.now()
+        created_at: Date.now(),
       };
       // Save to localStorage
       if (window.localStorage) {
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(tokenWithTimestamp));
       }
       // Also save to cookies for compatibility
-      Cookies.set('auth_token', token.access_token, {
-        expires: token.expires_in / 86400 // Convert seconds to days
+      Cookies.set("auth_token", token.access_token, {
+        expires: token.expires_in / 86400, // Convert seconds to days
       });
     }
   }
 
   static getToken(): AuthToken | null {
-    if (typeof window === 'undefined' || !window.localStorage) {
+    if (typeof window === "undefined" || !window.localStorage) {
       return null;
     }
 
@@ -48,7 +48,7 @@ export class AuthStore {
       const token = JSON.parse(stored) as AuthToken;
 
       // Check if token is expired
-      const expiresAt = token.created_at + (token.expires_in * 1000);
+      const expiresAt = token.created_at + token.expires_in * 1000;
       if (Date.now() > expiresAt) {
         this.clearToken();
         return null;
@@ -62,24 +62,24 @@ export class AuthStore {
   }
 
   static clearToken(): void {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       if (window.localStorage) {
         localStorage.removeItem(this.STORAGE_KEY);
         localStorage.removeItem(this.USER_KEY);
       }
       // Also clear cookies
-      Cookies.remove('auth_token');
+      Cookies.remove("auth_token");
     }
   }
 
   static saveUser(user: User): void {
-    if (typeof window !== 'undefined' && window.localStorage) {
+    if (typeof window !== "undefined" && window.localStorage) {
       localStorage.setItem(this.USER_KEY, JSON.stringify(user));
     }
   }
 
   static getUser(): User | null {
-    if (typeof window === 'undefined' || !window.localStorage) {
+    if (typeof window === "undefined" || !window.localStorage) {
       return null;
     }
 
@@ -100,14 +100,26 @@ export class AuthStore {
   }
 
   static getAccessToken(): string | null {
-    // First try to get from localStorage
+    // First try to get from localStorage (standard SDK auth)
     const token = this.getToken();
     if (token) {
       return token.access_token;
     }
 
+    // Fallback: Check native auth tokens (Android/iOS native app integration)
+    if (typeof window !== "undefined" && window.localStorage) {
+      // Check for CIRIS access token injected by native app (Google OAuth)
+      const nativeToken =
+        localStorage.getItem("ciris_access_token") ||
+        localStorage.getItem("access_token") ||
+        localStorage.getItem("ciris_native_auth_token");
+      if (nativeToken) {
+        return nativeToken;
+      }
+    }
+
     // Fallback to cookie for compatibility
-    const cookieToken = Cookies.get('auth_token');
+    const cookieToken = Cookies.get("auth_token");
     return cookieToken || null;
   }
 }

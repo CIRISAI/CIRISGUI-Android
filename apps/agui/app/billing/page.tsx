@@ -416,7 +416,7 @@ export default function BillingPage() {
                 <div className="bg-gray-50 rounded-lg p-4">
                   <p className="text-sm text-gray-600">Paid Credits</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {credits.credits_remaining - credits.free_uses_remaining}
+                    {Math.max(0, credits.credits_remaining - credits.free_uses_remaining)}
                   </p>
                 </div>
               </div>

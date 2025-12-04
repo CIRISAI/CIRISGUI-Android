@@ -205,17 +205,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem("ciris_native_auth_complete", "true");
       }
 
-      // Create user from saved auth data
+      // Fetch actual user from API to get correct user_id and wa_role
       try {
         const authData = JSON.parse(nativeAuthData);
-        const restoredUser: User = {
-          user_id: authData.googleUserId || "admin",
-          username: authData.displayName || authData.email || "admin",
-          role: "SYSTEM_ADMIN",
-          api_role: "ADMIN",
-          permissions: ["read", "write", "admin"],
-          created_at: new Date().toISOString(),
-        };
+        let restoredUser: User;
+
+        try {
+          // Try to fetch the actual user from the API
+          restoredUser = await cirisClient.auth.getMe();
+          console.log("[AuthContext] Restored user from API:", restoredUser.user_id);
+        } catch (apiError) {
+          console.warn("[AuthContext] Failed to fetch user from API, using mock user:", apiError);
+          // Fallback to mock user if API call fails
+          restoredUser = {
+            user_id: authData.googleUserId || "admin",
+            username: authData.displayName || authData.email || "admin",
+            role: "SYSTEM_ADMIN",
+            api_role: "ADMIN",
+            permissions: ["read", "write", "admin"],
+            created_at: new Date().toISOString(),
+          };
+        }
         setUser(restoredUser);
         setLoading(false);
 
