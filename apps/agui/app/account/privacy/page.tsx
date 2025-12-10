@@ -35,13 +35,27 @@ function PrivacyPageContent() {
   }, [user]);
 
   const fetchDsarRequests = async () => {
+    console.log("[Privacy Page] fetchDsarRequests called, user role:", user?.role);
     setLoading(true);
     try {
       const requests = await cirisClient.dsar.listRequests();
-      setDsarRequests(requests);
+      console.log(
+        "[Privacy Page] Received requests:",
+        requests,
+        "type:",
+        typeof requests,
+        "isArray:",
+        Array.isArray(requests)
+      );
+      if (!Array.isArray(requests)) {
+        console.error("[Privacy Page] Expected array but got:", requests);
+        setDsarRequests([]);
+      } else {
+        setDsarRequests(requests);
+      }
     } catch (error: any) {
-      console.error("Failed to fetch DSAR requests:", error);
-      // Don't alert here as this is just for admin visibility
+      console.error("[Privacy Page] Failed to fetch DSAR requests:", error);
+      setDsarRequests([]); // Ensure we set empty array on error
     } finally {
       setLoading(false);
     }

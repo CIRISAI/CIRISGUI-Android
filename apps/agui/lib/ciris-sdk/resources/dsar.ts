@@ -54,7 +54,26 @@ export class DSARResource extends BaseResource {
    * Requires: ADMIN+ permissions
    */
   async listRequests(): Promise<DSARTicket[]> {
-    return this.transport.get<DSARTicket[]>("/v1/dsar/");
+    console.log("[DSAR SDK] Fetching DSAR requests...");
+    const response = await this.transport.get<
+      { requests: DSARTicket[]; total: number } | DSARTicket[]
+    >("/v1/dsar/");
+    console.log("[DSAR SDK] Raw response:", JSON.stringify(response).substring(0, 200));
+
+    // Handle both wrapped and unwrapped response formats
+    if (response && typeof response === "object" && "requests" in response) {
+      console.log("[DSAR SDK] Extracted requests array, count:", response.requests?.length ?? 0);
+      return response.requests || [];
+    }
+
+    // If it's already an array, return it
+    if (Array.isArray(response)) {
+      console.log("[DSAR SDK] Response is array, count:", response.length);
+      return response;
+    }
+
+    console.warn("[DSAR SDK] Unexpected response format, returning empty array:", typeof response);
+    return [];
   }
 
   /**
