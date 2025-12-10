@@ -393,6 +393,16 @@ export default function SetupWizard() {
                   configure your instance in just a few steps.
                 </p>
 
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
+                  <h4 className="font-semibold text-amber-900 mb-2">About LLM Requirements</h4>
+                  <p className="text-sm text-amber-800">
+                    CIRIS requires an off-device LLM server for AI reasoning. This can be a cloud
+                    provider (OpenAI, Anthropic, etc.) or your own hardware running an
+                    OpenAI-compatible API. CIRIS also provides a privacy-protecting LLM proxy
+                    service with 2 free daily uses, and you can purchase more via Google Play.
+                  </p>
+                </div>
+
                 <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-3">
                   What you'll configure:
                 </h3>
@@ -409,15 +419,15 @@ export default function SetupWizard() {
                       <li className="flex items-start">
                         <span className="text-green-600 mr-2">•</span>
                         <span>
-                          <strong>CIRIS Key</strong> - Use your Google account for pay-as-you-go LLM
-                          credits (no API key needed)
+                          <strong>CIRIS Key</strong> - Use CIRIS's privacy-protecting LLM proxy with
+                          2 free daily uses (purchase more via Google Play)
                         </span>
                       </li>
                       <li className="flex items-start">
                         <span className="text-green-600 mr-2">•</span>
                         <span>
                           <strong>Bring Your Own Key (BYOK)</strong> - Use your own OpenAI,
-                          Anthropic, or compatible API key
+                          Anthropic, or self-hosted OpenAI-compatible API
                         </span>
                       </li>
                       <li className="flex items-start">
@@ -434,8 +444,8 @@ export default function SetupWizard() {
                     <li className="flex items-start">
                       <span className="text-indigo-600 mr-2">•</span>
                       <span>
-                        <strong>LLM API Key</strong> - An API key from OpenAI, Anthropic, or another
-                        supported provider
+                        <strong>LLM API Key</strong> - An API key from OpenAI, Anthropic, or your
+                        own OpenAI-compatible server
                       </span>
                     </li>
                     <li className="flex items-start">
@@ -525,7 +535,7 @@ export default function SetupWizard() {
                         <div className="flex-1">
                           <div className="font-semibold text-gray-900">CIRIS Key</div>
                           <div className="text-sm text-gray-600 mt-1">
-                            Use your Google account for LLM access. No API key needed!
+                            Use CIRIS's privacy-protecting LLM proxy. No API key needed!
                           </div>
                           <div className="mt-2 p-2 bg-green-50 rounded-md">
                             <div className="text-xs font-medium text-green-800">
