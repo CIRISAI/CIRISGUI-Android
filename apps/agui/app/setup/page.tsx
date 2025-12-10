@@ -1087,7 +1087,7 @@ export default function SetupWizard() {
                     actuallyNativeApp
                   );
 
-                  // Native app users are already authenticated, go to main app
+                  // Native app users are already authenticated, go to native InteractActivity
                   // Non-native users need to login first
                   if (actuallyNativeApp || isNativeApp) {
                     console.log(
@@ -1095,15 +1095,22 @@ export default function SetupWizard() {
                     );
                     // Tell the native app to refresh the token to get updated role (ADMIN after setup)
                     const win = window as unknown as {
-                      CIRISNative?: { refreshToken?: () => void };
+                      CIRISNative?: { refreshToken?: () => void; navigateToInteract?: () => void };
                     };
                     if (typeof win.CIRISNative !== "undefined" && win.CIRISNative.refreshToken) {
                       console.log("[Setup Complete] Calling CIRISNative.refreshToken()");
                       win.CIRISNative.refreshToken();
-                      // Give the token refresh a moment to complete before navigating
+                      // Give the token refresh a moment to complete before navigating to native InteractActivity
                       setTimeout(() => {
-                        console.log("[Setup Complete] Navigating to / after token refresh");
-                        window.location.href = "/";
+                        if (win.CIRISNative?.navigateToInteract) {
+                          console.log("[Setup Complete] Navigating to native InteractActivity");
+                          win.CIRISNative.navigateToInteract();
+                        } else {
+                          console.log(
+                            "[Setup Complete] navigateToInteract not available, going to /"
+                          );
+                          window.location.href = "/";
+                        }
                       }, 1000);
                     } else {
                       console.log(
