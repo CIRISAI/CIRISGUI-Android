@@ -25,7 +25,6 @@ export default function SetupWizard() {
   const [isNativeApp, setIsNativeApp] = useState(false);
   const [isGoogleAuth, setIsGoogleAuth] = useState(false); // Separate from LLM choice
   const [llmChoice, setLlmChoice] = useState<"ciris_key" | "byok" | null>(null);
-  const [_nativeLLMMode, setNativeLLMMode] = useState<"ciris_proxy" | "custom" | null>(null);
 
   // Form state - Primary LLM
   const [selectedProvider, setSelectedProvider] = useState("");
@@ -35,16 +34,11 @@ export default function SetupWizard() {
   const [validatingLLM, setValidatingLLM] = useState(false);
   const [llmValid, setLlmValid] = useState(false);
 
-  // Backup/Secondary LLM (Optional)
-  const [enableBackupLLM, setEnableBackupLLM] = useState(false);
-  const [backupApiKey, setBackupApiKey] = useState("");
-  const [backupModel, setBackupModel] = useState("");
-  const [backupApiBase, setBackupApiBase] = useState("");
-
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [userPasswordError, setUserPasswordError] = useState<string | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Check if user is logged in with Google (affects user account requirements, NOT LLM choice)
   // Google users don't need a local account, but can still choose BYOK for LLM
@@ -86,7 +80,6 @@ export default function SetupWizard() {
     // Restore saved LLM choice if available
     if (savedLlmChoice) {
       setLlmChoice(savedLlmChoice);
-      setNativeLLMMode(savedLlmChoice === "ciris_key" ? "ciris_proxy" : "custom");
     }
   };
 
@@ -268,10 +261,10 @@ export default function SetupWizard() {
         llm_api_key: finalApiKey,
         llm_base_url: finalBaseUrl,
         llm_model: finalModel,
-        // Backup LLM (optional) - available for all LLM choices
-        backup_llm_api_key: enableBackupLLM && backupApiKey ? backupApiKey : null,
-        backup_llm_base_url: enableBackupLLM && backupApiBase ? backupApiBase : null,
-        backup_llm_model: enableBackupLLM && backupModel ? backupModel : null,
+        // Backup LLM (not configured in simplified setup)
+        backup_llm_api_key: null,
+        backup_llm_base_url: null,
+        backup_llm_model: null,
         template_id: selectedTemplate || "general",
         enabled_adapters: ["api"], // Default to just API adapter
         adapter_config: {},
@@ -374,76 +367,48 @@ export default function SetupWizard() {
           {/* Step 1: Welcome */}
           {currentStep === "welcome" && (
             <div className="space-y-6">
-              <h2 className="text-2xl font-bold text-gray-900">Let's Get Started</h2>
+              <div className="text-center">
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium mb-4">
+                  <span>✓</span> 100% Free & Open Source
+                </div>
+                <h2 className="text-2xl font-bold text-gray-900">Welcome to CIRIS</h2>
+              </div>
+
               <div className="prose prose-indigo max-w-none">
-                <p className="text-gray-700 leading-relaxed">
-                  CIRIS is a next-generation AI assistant that prioritizes cognitive integrity,
-                  transparency, and ethical decision-making. This setup wizard will help you
-                  configure your instance in just a few steps.
+                <p className="text-gray-700 leading-relaxed text-center">
+                  CIRIS is an ethical AI assistant that runs on your device. Your conversations and
+                  data stay private.
                 </p>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mt-4">
-                  <h4 className="font-semibold text-amber-900 mb-2">About LLM Requirements</h4>
-                  <p className="text-sm text-amber-800">
-                    CIRIS requires an off-device LLM server for AI reasoning. This can be a cloud
-                    provider (OpenAI, Anthropic, etc.) or your own hardware running an
-                    OpenAI-compatible API. CIRIS also provides a privacy-protecting LLM proxy
-                    service with 2 free daily uses, and you can purchase more via Google Play.
-                  </p>
-                </div>
-
-                <h3 className="text-lg font-semibold text-gray-900 mt-6 mb-3">
-                  What you'll configure:
-                </h3>
                 {isGoogleAuth ? (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-green-600 text-xl">✓</span>
-                      <span className="font-semibold text-green-900">Google Sign-In Detected</span>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-5 mt-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-green-600 text-2xl">✓</span>
+                      <span className="font-semibold text-green-900 text-lg">
+                        You're ready to go!
+                      </span>
                     </div>
-                    <p className="text-sm text-green-800 mb-3">
-                      You're signed in with Google! You have two options for LLM access:
+                    <p className="text-sm text-green-800">
+                      Since you signed in with Google, CIRIS can start working right away with free
+                      AI access. Your conversations are private and never used for training.
                     </p>
-                    <ul className="space-y-2">
-                      <li className="flex items-start">
-                        <span className="text-green-600 mr-2">•</span>
-                        <span>
-                          <strong>CIRIS Key</strong> - Use CIRIS's privacy-protecting LLM proxy with
-                          2 free daily uses (purchase more via Google Play)
-                        </span>
-                      </li>
-                      <li className="flex items-start">
-                        <span className="text-green-600 mr-2">•</span>
-                        <span>
-                          <strong>Bring Your Own Key (BYOK)</strong> - Use your own OpenAI,
-                          Anthropic, or self-hosted OpenAI-compatible API
-                        </span>
-                      </li>
-                    </ul>
                   </div>
                 ) : (
-                  <ul className="space-y-2">
-                    <li className="flex items-start">
-                      <span className="text-indigo-600 mr-2">•</span>
-                      <span>
-                        <strong>LLM API Key</strong> - An API key from OpenAI, Anthropic, or your
-                        own OpenAI-compatible server
-                      </span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-indigo-600 mr-2">•</span>
-                      <span>
-                        <strong>Your Account</strong> - Username and password for your personal
-                        account
-                      </span>
-                    </li>
-                  </ul>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-5 mt-6">
+                    <h4 className="font-semibold text-blue-900 mb-2">Quick Setup Required</h4>
+                    <p className="text-sm text-blue-800">
+                      To power AI conversations, you'll need to connect an AI provider (like OpenAI
+                      or Anthropic). This takes about 2 minutes.
+                    </p>
+                  </div>
                 )}
 
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
-                  <p className="text-sm text-blue-900">
-                    <strong>Note:</strong> All data is stored locally on your device. Your API keys
-                    and passwords are encrypted and never shared.
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-6">
+                  <h4 className="font-semibold text-gray-700 mb-2 text-sm">How it works</h4>
+                  <p className="text-sm text-gray-600">
+                    CIRIS runs entirely on your device. However, AI reasoning requires powerful
+                    servers. CIRIS connects to privacy-respecting AI providers that never train on
+                    your data and never store your conversations.
                   </p>
                 </div>
               </div>
@@ -452,7 +417,7 @@ export default function SetupWizard() {
                 onClick={() => setCurrentStep("llm")}
                 className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
               >
-                Continue to LLM Setup →
+                Continue →
               </button>
             </div>
           )}
@@ -461,7 +426,7 @@ export default function SetupWizard() {
           {currentStep === "llm" && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-gray-900">Configure Your LLM</h2>
+                <h2 className="text-2xl font-bold text-gray-900">AI Configuration</h2>
                 <button
                   onClick={() => setCurrentStep("welcome")}
                   className="text-gray-500 hover:text-gray-700"
@@ -470,140 +435,87 @@ export default function SetupWizard() {
                 </button>
               </div>
 
-              <p className="text-gray-600">
-                {isGoogleAuth
-                  ? "Choose how you want to power your AI assistant. You can use CIRIS-hosted credits or bring your own API key."
-                  : "Enter your LLM API credentials. We'll test the connection to make sure everything works."}
-              </p>
-
-              {/* LLM Choice Selection - CIRIS Key vs BYOK */}
-              <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 rounded-lg p-5">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">LLM Provider</h3>
-                <div className="space-y-3">
-                  {/* CIRIS Key option - only available for Google users */}
-                  {isGoogleAuth && (
-                    <button
-                      onClick={() => {
-                        console.log("[Setup] CIRIS Key button clicked");
-                        const googleUserId = localStorage.getItem("ciris_google_user_id") || "";
-                        console.log("[Setup] Google User ID from localStorage:", googleUserId);
-                        setLlmChoice("ciris_key");
-                        setNativeLLMMode("ciris_proxy");
-                        setSelectedProvider("openai"); // CIRIS proxy is OpenAI-compatible
-                        setLlmValid(true); // CIRIS proxy is pre-validated
-                        // Pre-populate API key with google:{userId} format for debugging
-                        const proxyKey = googleUserId ? `google:${googleUserId}` : "";
-                        setApiKey(proxyKey);
-                        console.log("[Setup] Setting apiKey to:", proxyKey);
-                        setApiBase("https://llm.ciris.ai/v1"); // Correct CIRIS proxy URL
-                        setSelectedModel("default");
-                        localStorage.setItem("ciris_llm_choice", "ciris_key");
-                      }}
-                      className={`w-full p-4 border-2 rounded-lg text-left transition-all ${
-                        llmChoice === "ciris_key"
-                          ? "border-indigo-600 bg-white"
-                          : "border-gray-200 bg-white hover:border-gray-300"
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="text-2xl">✨</div>
-                        <div className="flex-1">
-                          <div className="font-semibold text-gray-900">CIRIS Key</div>
-                          <div className="text-sm text-gray-600 mt-1">
-                            Use CIRIS's privacy-protecting LLM proxy. No API key needed!
-                          </div>
-                          <div className="mt-2 p-2 bg-green-50 rounded-md">
-                            <div className="text-xs font-medium text-green-800">
-                              Free tier included:
-                            </div>
-                            <ul className="text-xs text-green-700 mt-1 space-y-0.5">
-                              <li>• 5 free interactions to start</li>
-                              <li>• 2 free interactions per day</li>
-                              <li>• Purchase more via Google Play ($4.99 for 100 credits)</li>
-                            </ul>
-                          </div>
-                        </div>
-                        {llmChoice === "ciris_key" && (
-                          <span className="text-indigo-600 text-xl">✓</span>
-                        )}
+              {/* Google users: Simple free AI option with hidden advanced */}
+              {isGoogleAuth && !showAdvanced && (
+                <div className="space-y-4">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-5">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-green-600 text-2xl">✓</span>
+                      <div>
+                        <div className="font-semibold text-green-900">Free AI Access Ready</div>
+                        <p className="text-sm text-green-700 mt-1">
+                          Your Google account includes free AI conversations. Privacy-protected and
+                          never used for training.
+                        </p>
                       </div>
-                    </button>
-                  )}
+                    </div>
+                  </div>
 
-                  {/* BYOK option - available for all users */}
                   <button
                     onClick={() => {
-                      setLlmChoice("byok");
-                      setNativeLLMMode("custom");
-                      setSelectedProvider("");
-                      setLlmValid(false);
-                      setApiBase("");
-                      localStorage.setItem("ciris_llm_choice", "byok");
+                      // Auto-select CIRIS proxy for Google users
+                      const googleUserId = localStorage.getItem("ciris_google_user_id") || "";
+                      setLlmChoice("ciris_key");
+                      setSelectedProvider("openai");
+                      setLlmValid(true);
+                      const proxyKey = googleUserId ? `google:${googleUserId}` : "";
+                      setApiKey(proxyKey);
+                      setApiBase("https://llm.ciris.ai/v1");
+                      setSelectedModel("default");
+                      localStorage.setItem("ciris_llm_choice", "ciris_key");
+                      setCurrentStep("users");
                     }}
-                    className={`w-full p-4 border-2 rounded-lg text-left transition-all ${
-                      llmChoice === "byok"
-                        ? "border-indigo-600 bg-white"
-                        : "border-gray-200 bg-white hover:border-gray-300"
-                    }`}
+                    className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="text-2xl">🔑</div>
-                      <div className="flex-1">
-                        <div className="font-semibold text-gray-900">Bring Your Own Key (BYOK)</div>
-                        <div className="text-sm text-gray-600 mt-1">
-                          Use your own OpenAI, Anthropic, or OpenAI-compatible API key.
-                        </div>
-                        <div className="mt-2 p-2 bg-blue-50 rounded-md">
-                          <div className="text-xs font-medium text-blue-800">
-                            100% Free - No CIRIS charges
-                          </div>
-                          <ul className="text-xs text-blue-700 mt-1 space-y-0.5">
-                            <li>• Unlimited interactions using your API key</li>
-                            <li>• You pay your provider directly (OpenAI, Anthropic, etc.)</li>
-                            <li>• Full control over model selection and costs</li>
-                          </ul>
-                        </div>
-                      </div>
-                      {llmChoice === "byok" && <span className="text-indigo-600 text-xl">✓</span>}
-                    </div>
+                    Continue →
                   </button>
 
-                  {/* Info for non-Google users */}
-                  {!isGoogleAuth && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-2">
-                      <p className="text-sm text-yellow-800">
-                        <strong>Note:</strong> CIRIS Key requires Google Sign-In. Sign in with
-                        Google to use CIRIS-hosted LLM credits.
-                      </p>
-                    </div>
-                  )}
+                  <button
+                    onClick={() => setShowAdvanced(true)}
+                    className="w-full text-center text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    I have my own AI provider (Advanced)
+                  </button>
                 </div>
-              </div>
+              )}
 
-              {/* Provider selection - show when BYOK is selected */}
-              {llmChoice === "byok" && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Provider</label>
-                  <div className="grid grid-cols-2 gap-4">
-                    {providers.map(p => (
-                      <button
-                        key={p.id}
-                        onClick={() => {
-                          setSelectedProvider(p.id);
-                          setLlmValid(false);
-                        }}
-                        className={`p-4 border-2 rounded-lg text-left transition-all ${
-                          selectedProvider === p.id
-                            ? "border-indigo-600 bg-indigo-50"
-                            : "border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        <div className="font-semibold text-gray-900">{p.name}</div>
-                        <div className="text-xs text-gray-500 mt-1">{p.description}</div>
-                      </button>
-                    ))}
+              {/* Non-Google users OR advanced mode: Show provider options */}
+              {(!isGoogleAuth || showAdvanced) && (
+                <>
+                  <p className="text-gray-600">
+                    {showAdvanced
+                      ? "Connect your own AI provider for unlimited conversations."
+                      : "Connect an AI provider to power conversations."}
+                  </p>
+
+                  {/* Provider selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      AI Provider
+                    </label>
+                    <div className="grid grid-cols-2 gap-4">
+                      {providers.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => {
+                            setLlmChoice("byok");
+                            setSelectedProvider(p.id);
+                            setLlmValid(false);
+                            localStorage.setItem("ciris_llm_choice", "byok");
+                          }}
+                          className={`p-4 border-2 rounded-lg text-left transition-all ${
+                            selectedProvider === p.id
+                              ? "border-indigo-600 bg-indigo-50"
+                              : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <div className="font-semibold text-gray-900">{p.name}</div>
+                          <div className="text-xs text-gray-500 mt-1">{p.description}</div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
 
               {/* API Key - only show for BYOK providers */}
@@ -691,100 +603,30 @@ export default function SetupWizard() {
                 </div>
               )}
 
-              {/* CIRIS Key status */}
-              {useCirisProxy && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
-                  <span className="text-green-600 text-xl">✓</span>
-                  <div>
-                    <div className="font-medium text-green-900">CIRIS LLM Proxy Ready</div>
-                    <div className="text-sm text-green-700">
-                      Your Google account will be used for authentication and billing.
-                    </div>
-                  </div>
-                </div>
+              {/* Continue button for BYOK mode */}
+              {llmChoice === "byok" && (
+                <button
+                  onClick={() => setCurrentStep("users")}
+                  disabled={!llmValid}
+                  className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+                >
+                  Continue →
+                </button>
               )}
 
-              {/* Optional Backup LLM Configuration - available for all LLM choices */}
-              {llmChoice && (
-                <div className="border-t border-gray-200 pt-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Backup LLM{" "}
-                        <span className="text-sm font-normal text-gray-500">(Optional)</span>
-                      </h3>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Configure a secondary LLM provider for redundancy
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setEnableBackupLLM(!enableBackupLLM)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        enableBackupLLM
-                          ? "bg-indigo-100 text-indigo-700"
-                          : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                      }`}
-                    >
-                      {enableBackupLLM ? "Enabled" : "Enable"}
-                    </button>
-                  </div>
-
-                  {enableBackupLLM && (
-                    <div className="space-y-4 pl-4 border-l-2 border-indigo-200">
-                      {/* Backup API Key */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Backup API Key
-                        </label>
-                        <input
-                          type="password"
-                          value={backupApiKey}
-                          onChange={e => setBackupApiKey(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                          placeholder="Backup LLM API key"
-                        />
-                      </div>
-
-                      {/* Backup Model */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Backup Model <span className="text-gray-500">(optional)</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={backupModel}
-                          onChange={e => setBackupModel(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                          placeholder="Model name"
-                        />
-                      </div>
-
-                      {/* Backup Base URL */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Backup Base URL <span className="text-gray-500">(optional)</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={backupApiBase}
-                          onChange={e => setBackupApiBase(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                          placeholder="https://api.openai.com/v1"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
+              {/* Back to simple mode for Google users */}
+              {showAdvanced && isGoogleAuth && (
+                <button
+                  onClick={() => {
+                    setShowAdvanced(false);
+                    setLlmChoice(null);
+                    setSelectedProvider("");
+                  }}
+                  className="w-full text-center text-sm text-gray-500 hover:text-gray-700"
+                >
+                  ← Use free AI instead
+                </button>
               )}
-
-              <button
-                onClick={() => setCurrentStep("users")}
-                disabled={!llmChoice || (!llmValid && !useCirisProxy)}
-                className="w-full px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                Continue to User Setup →
-              </button>
             </div>
           )}
 
@@ -821,14 +663,14 @@ export default function SetupWizard() {
                     <h3 className="font-semibold text-blue-900 mb-2">Setup Summary</h3>
                     <ul className="text-sm text-blue-800 space-y-1">
                       <li>
-                        • <strong>LLM:</strong>{" "}
-                        {useCirisProxy ? "CIRIS Key (Google-linked)" : "Your own API key"}
+                        • <strong>AI:</strong>{" "}
+                        {useCirisProxy ? "Free AI Access (via Google)" : "Your own AI provider"}
                       </li>
                       <li>
-                        • <strong>Agent Template:</strong> Ally (Default Assistant)
+                        • <strong>Assistant:</strong> Ally
                       </li>
                       <li>
-                        • <strong>Authentication:</strong> Google Sign-In
+                        • <strong>Sign-in:</strong> Google Account
                       </li>
                     </ul>
                   </div>
