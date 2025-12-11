@@ -41,9 +41,6 @@ export default function SetupWizard() {
   const [backupModel, setBackupModel] = useState("");
   const [backupApiBase, setBackupApiBase] = useState("");
 
-  const [adminPassword, setAdminPassword] = useState("");
-  const [adminPasswordConfirm, setAdminPasswordConfirm] = useState("");
-  const [adminPasswordError, setAdminPasswordError] = useState<string | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -197,12 +194,7 @@ export default function SetupWizard() {
     console.log("[Setup]   ciris_llm_choice:", localStorage.getItem("ciris_llm_choice"));
     console.log("[Setup]   isNativeApp:", localStorage.getItem("isNativeApp"));
 
-    // For OAuth users, admin password is auto-generated (no validation needed)
-    // For non-OAuth users, validate admin password
-    if (!isGoogleAuth && adminPassword !== adminPasswordConfirm) {
-      toast.error("Admin passwords do not match");
-      return;
-    }
+    // Admin password is always auto-generated - no validation needed
     // Only validate user passwords if showing local user fields
     if (showLocalUserFields && password !== passwordConfirm) {
       toast.error("User passwords do not match");
@@ -214,16 +206,13 @@ export default function SetupWizard() {
       return;
     }
 
-    // Generate random admin password for OAuth users (they won't need it)
-    let finalAdminPassword = adminPassword;
-    if (isGoogleAuth && !adminPassword) {
-      const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
-      finalAdminPassword = "";
-      for (let i = 0; i < 32; i++) {
-        finalAdminPassword += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      console.log("[Setup] Auto-generated secure random admin password for OAuth user");
+    // Always generate random admin password (users don't need to enter it)
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+    let finalAdminPassword = "";
+    for (let i = 0; i < 32; i++) {
+      finalAdminPassword += chars.charAt(Math.floor(Math.random() * chars.length));
     }
+    console.log("[Setup] Auto-generated secure random admin password");
 
     setLoading(true);
     try {
@@ -430,13 +419,6 @@ export default function SetupWizard() {
                           Anthropic, or self-hosted OpenAI-compatible API
                         </span>
                       </li>
-                      <li className="flex items-start">
-                        <span className="text-green-600 mr-2">•</span>
-                        <span>
-                          <strong>Admin Password</strong> - A secure password (min 8 characters) for
-                          the admin account
-                        </span>
-                      </li>
                     </ul>
                   </div>
                 ) : (
@@ -446,13 +428,6 @@ export default function SetupWizard() {
                       <span>
                         <strong>LLM API Key</strong> - An API key from OpenAI, Anthropic, or your
                         own OpenAI-compatible server
-                      </span>
-                    </li>
-                    <li className="flex items-start">
-                      <span className="text-indigo-600 mr-2">•</span>
-                      <span>
-                        <strong>Admin Password</strong> - A secure password for the default admin
-                        account
                       </span>
                     </li>
                     <li className="flex items-start">
@@ -855,104 +830,13 @@ export default function SetupWizard() {
                       <li>
                         • <strong>Authentication:</strong> Google Sign-In
                       </li>
-                      <li>
-                        • <strong>Admin Password:</strong> Auto-generated (secure random)
-                      </li>
                     </ul>
                   </div>
                 </div>
               ) : (
-                <>
-                  <p className="text-gray-600">
-                    First, set a secure password for the default admin account. Then create your
-                    personal user account.
-                  </p>
-
-                  {/* Admin Password - only for non-OAuth users */}
-                  <div className="border-b border-gray-200 pb-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Admin Account</h3>
-                    <div className="space-y-4">
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <label
-                            htmlFor="adminPassword"
-                            className="block text-sm font-medium text-gray-700"
-                          >
-                            New Admin Password{" "}
-                            <span className="text-xs text-gray-500">(min 8 characters)</span>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              // Generate a random 16-character password
-                              const chars =
-                                "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
-                              let randomPassword = "";
-                              for (let i = 0; i < 16; i++) {
-                                randomPassword += chars.charAt(
-                                  Math.floor(Math.random() * chars.length)
-                                );
-                              }
-                              setAdminPassword(randomPassword);
-                              setAdminPasswordConfirm(randomPassword);
-                              setAdminPasswordError(null);
-                              // Copy to clipboard
-                              navigator.clipboard
-                                .writeText(randomPassword)
-                                .then(() => {
-                                  toast.success(
-                                    "Random password generated and copied to clipboard!"
-                                  );
-                                })
-                                .catch(() => {
-                                  toast.success(`Random password generated: ${randomPassword}`);
-                                });
-                            }}
-                            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-                          >
-                            Generate Random
-                          </button>
-                        </div>
-                        <input
-                          id="adminPassword"
-                          type="password"
-                          value={adminPassword}
-                          onChange={e => {
-                            setAdminPassword(e.target.value);
-                            if (e.target.value.length > 0 && e.target.value.length < 8) {
-                              setAdminPasswordError("Password must be at least 8 characters");
-                            } else {
-                              setAdminPasswordError(null);
-                            }
-                          }}
-                          className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-                            adminPasswordError ? "border-red-500" : "border-gray-300"
-                          }`}
-                          placeholder="Enter a secure password (min 8 chars)"
-                        />
-                        {adminPasswordError && (
-                          <p className="mt-1 text-sm text-red-600">{adminPasswordError}</p>
-                        )}
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="adminPasswordConfirm"
-                          className="block text-sm font-medium text-gray-700 mb-2"
-                        >
-                          Confirm Admin Password
-                        </label>
-                        <input
-                          id="adminPasswordConfirm"
-                          type="password"
-                          value={adminPasswordConfirm}
-                          onChange={e => setAdminPasswordConfirm(e.target.value)}
-                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                          placeholder="Re-enter password"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </>
+                <p className="text-gray-600">
+                  Create your personal user account to access the CIRIS dashboard.
+                </p>
               )}
 
               {/* User Account - Only shown for non-Google OAuth users */}
@@ -1042,12 +926,6 @@ export default function SetupWizard() {
                 onClick={completeSetup}
                 disabled={
                   loading ||
-                  // For OAuth users: admin password is auto-generated, no validation needed
-                  // For non-OAuth users: admin password required (min 8 chars, must match)
-                  (!isGoogleAuth &&
-                    (!adminPassword ||
-                      adminPassword.length < 8 ||
-                      adminPassword !== adminPasswordConfirm)) ||
                   // Only require local user account for non-Google OAuth users
                   (showLocalUserFields &&
                     (!username ||
