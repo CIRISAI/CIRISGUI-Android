@@ -501,6 +501,10 @@ export default function SetupWizard() {
                             setLlmChoice("byok");
                             setSelectedProvider(p.id);
                             setLlmValid(false);
+                            // Reset all fields when switching providers to avoid stale state
+                            setApiKey("");
+                            setSelectedModel(p.default_model || "");
+                            setApiBase(p.default_base_url || ""); // Clear CIRIS proxy URL
                             localStorage.setItem("ciris_llm_choice", "byok");
                           }}
                           className={`p-4 border-2 rounded-lg text-left transition-all ${
