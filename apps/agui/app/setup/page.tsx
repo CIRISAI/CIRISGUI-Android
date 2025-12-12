@@ -672,8 +672,8 @@ export default function SetupWizard() {
                 </div>
               )}
 
-              {/* Validation - only show for BYOK providers */}
-              {llmChoice === "byok" && (
+              {/* Validation - show when BYOK form is visible and provider selected */}
+              {(!isGoogleAuth || showAdvanced) && selectedProvider && (
                 <div className="flex items-center space-x-4">
                   <button
                     onClick={validateLLM}
@@ -686,8 +686,8 @@ export default function SetupWizard() {
                 </div>
               )}
 
-              {/* Continue button for BYOK mode */}
-              {llmChoice === "byok" && (
+              {/* Continue button for BYOK mode - show when BYOK form visible */}
+              {(!isGoogleAuth || showAdvanced) && selectedProvider && (
                 <button
                   onClick={() => setCurrentStep("users")}
                   disabled={!llmValid}
