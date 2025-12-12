@@ -524,6 +524,36 @@ export default function SetupWizard() {
               {/* Non-Google users OR advanced mode: Show provider options */}
               {(!isGoogleAuth || showAdvanced) && (
                 <>
+                  {/* Back to CIRIS proxy option for Google users - prominent placement */}
+                  {showAdvanced && isGoogleAuth && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+                      <div>
+                        <span className="text-blue-900 font-medium">
+                          Using your own AI provider
+                        </span>
+                        <p className="text-sm text-blue-700">
+                          You can switch back to free AI anytime
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowAdvanced(false);
+                          setLlmChoice(null);
+                          setSelectedProvider("");
+                          setApiKey("");
+                          setApiBase("");
+                          setSelectedModel("");
+                          setLlmValid(false);
+                          setProviderModels(null);
+                          localStorage.removeItem("ciris_llm_choice");
+                        }}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                      >
+                        ← Use Free AI
+                      </button>
+                    </div>
+                  )}
+
                   <p className="text-gray-600">
                     {showAdvanced
                       ? "Connect your own AI provider for unlimited conversations."
@@ -704,19 +734,7 @@ export default function SetupWizard() {
                 </button>
               )}
 
-              {/* Back to simple mode for Google users */}
-              {showAdvanced && isGoogleAuth && (
-                <button
-                  onClick={() => {
-                    setShowAdvanced(false);
-                    setLlmChoice(null);
-                    setSelectedProvider("");
-                  }}
-                  className="w-full text-center text-sm text-gray-500 hover:text-gray-700"
-                >
-                  ← Use free AI instead
-                </button>
-              )}
+              {/* Back to simple mode button removed - now using prominent banner at top of form */}
             </div>
           )}
 
