@@ -506,7 +506,14 @@ export default function SetupWizard() {
                   </button>
 
                   <button
-                    onClick={() => setShowAdvanced(true)}
+                    onClick={() => {
+                      setShowAdvanced(true);
+                      setLlmChoice("byok");
+                      // Load models for the already-selected provider
+                      if (selectedProvider) {
+                        loadProviderModels(selectedProvider);
+                      }
+                    }}
                     className="w-full text-center text-sm text-gray-500 hover:text-gray-700"
                   >
                     I have my own AI provider (Advanced)
