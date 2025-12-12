@@ -7,6 +7,8 @@ import type {
   LLMProvider,
   AgentTemplate,
   SetupCompleteRequest,
+  ProviderModelsResponse,
+  ModelInfo,
 } from "../../lib/ciris-sdk/resources/setup";
 import LogoIcon from "../../components/ui/floating/LogoIcon";
 import toast from "react-hot-toast";
@@ -33,6 +35,10 @@ export default function SetupWizard() {
   const [apiBase, setApiBase] = useState("");
   const [validatingLLM, setValidatingLLM] = useState(false);
   const [llmValid, setLlmValid] = useState(false);
+
+  // Model capabilities state for BYOK dropdown
+  const [providerModels, setProviderModels] = useState<ProviderModelsResponse | null>(null);
+  const [loadingModels, setLoadingModels] = useState(false);
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -122,6 +128,35 @@ export default function SetupWizard() {
     } catch (error) {
       console.error("Failed to load setup data:", error);
       toast.error("Failed to load setup data");
+    }
+  };
+
+  // Load model capabilities for selected provider
+  const loadProviderModels = async (providerId: string) => {
+    if (!providerId) return;
+    setLoadingModels(true);
+    try {
+      const models = await cirisClient.setup.getProviderModels(providerId);
+      setProviderModels(models);
+      // Auto-select first recommended model if available
+      if (models.compatible_models.length > 0) {
+        const recommended = models.compatible_models.find(m => m.ciris_recommended);
+        if (recommended?.id) {
+          setSelectedModel(recommended.id);
+        } else if (models.compatible_models[0]?.id) {
+          setSelectedModel(models.compatible_models[0].id);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load provider models:", error);
+      // Fallback: use provider's default model
+      const p = providers.find(pr => pr.id === providerId);
+      if (p?.default_model) {
+        setSelectedModel(p.default_model);
+      }
+      setProviderModels(null);
+    } finally {
+      setLoadingModels(false);
     }
   };
 
@@ -505,7 +540,10 @@ export default function SetupWizard() {
                             setApiKey("");
                             setSelectedModel(p.default_model || "");
                             setApiBase(p.default_base_url || ""); // Clear CIRIS proxy URL
+                            setProviderModels(null); // Clear previous models
                             localStorage.setItem("ciris_llm_choice", "byok");
+                            // Load model capabilities for this provider
+                            loadProviderModels(p.id);
                           }}
                           className={`p-4 border-2 rounded-lg text-left transition-all ${
                             selectedProvider === p.id
@@ -519,61 +557,102 @@ export default function SetupWizard() {
                       ))}
                     </div>
                   </div>
+
+                  {/* API Key - show immediately in BYOK mode */}
+                  <div>
+                    <label
+                      htmlFor="apiKey"
+                      className="block text-sm font-medium text-gray-700 mb-2"
+                    >
+                      API Key <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="apiKey"
+                      type="password"
+                      value={apiKey}
+                      onChange={e => {
+                        setApiKey(e.target.value);
+                        setLlmValid(false);
+                      }}
+                      disabled={!selectedProvider}
+                      className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                        !selectedProvider ? "bg-gray-100 cursor-not-allowed" : ""
+                      }`}
+                      placeholder={selectedProvider ? "sk-..." : "Select a provider first"}
+                    />
+                  </div>
+
+                  {/* Model Selection - dropdown with loading state */}
+                  <div>
+                    <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-2">
+                      Model <span className="text-red-500">*</span>
+                    </label>
+                    {loadingModels ? (
+                      <div className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500 flex items-center gap-2">
+                        <span className="animate-spin">⟳</span> Loading models...
+                      </div>
+                    ) : providerModels && providerModels.compatible_models.length > 0 ? (
+                      <select
+                        id="model"
+                        value={selectedModel}
+                        onChange={e => {
+                          setSelectedModel(e.target.value);
+                          setLlmValid(false);
+                        }}
+                        disabled={!selectedProvider}
+                        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white ${
+                          !selectedProvider ? "bg-gray-100 cursor-not-allowed" : ""
+                        }`}
+                      >
+                        <option value="">Select a model...</option>
+                        <optgroup label="✅ CIRIS Compatible">
+                          {providerModels.compatible_models.map(model => (
+                            <option key={model.id} value={model.id}>
+                              {model.ciris_recommended ? "⭐ " : ""}
+                              {model.display_name}
+                              {model.capabilities?.vision ? " 👁️" : ""}
+                            </option>
+                          ))}
+                        </optgroup>
+                        {providerModels.incompatible_models.length > 0 && (
+                          <optgroup label="⚠️ May Have Issues">
+                            {providerModels.incompatible_models.map(model => (
+                              <option key={model.id} value={model.id}>
+                                {model.display_name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    ) : (
+                      <input
+                        id="model"
+                        type="text"
+                        value={selectedModel}
+                        onChange={e => {
+                          setSelectedModel(e.target.value);
+                          setLlmValid(false);
+                        }}
+                        disabled={!selectedProvider}
+                        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                          !selectedProvider ? "bg-gray-100 cursor-not-allowed" : ""
+                        }`}
+                        placeholder={
+                          selectedProvider
+                            ? provider?.default_model || "Enter model name"
+                            : "Select a provider first"
+                        }
+                      />
+                    )}
+                  </div>
                 </>
               )}
 
-              {/* API Key - only show for BYOK providers */}
-              {llmChoice === "byok" && provider && provider.requires_api_key && (
-                <div>
-                  <label htmlFor="apiKey" className="block text-sm font-medium text-gray-700 mb-2">
-                    API Key <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="apiKey"
-                    type="password"
-                    value={apiKey}
-                    onChange={e => {
-                      setApiKey(e.target.value);
-                      setLlmValid(false);
-                    }}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder="sk-..."
-                    required
-                  />
-                </div>
-              )}
-
-              {/* Model input - only show for BYOK providers */}
-              {llmChoice === "byok" && provider && provider.requires_model && (
-                <div>
-                  <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-2">
-                    Model Name {provider.requires_model && <span className="text-red-500">*</span>}
-                  </label>
-                  <input
-                    id="model"
-                    type="text"
-                    value={selectedModel}
-                    onChange={e => {
-                      setSelectedModel(e.target.value);
-                      setLlmValid(false);
-                    }}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                    placeholder={provider.default_model || "Enter model name"}
-                  />
-                  {provider.examples.length > 0 && (
-                    <p className="mt-1 text-xs text-gray-500">
-                      Examples: {provider.examples.slice(0, 2).join(", ")}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* API Base URL - only show for BYOK providers */}
+              {/* API Base URL - only show for providers that require it */}
               {llmChoice === "byok" && provider && provider.requires_base_url && (
                 <div>
                   <label htmlFor="apiBase" className="block text-sm font-medium text-gray-700 mb-2">
-                    API Base URL{" "}
-                    {provider.requires_base_url && <span className="text-red-500">*</span>}
+                    API Base URL <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="apiBase"

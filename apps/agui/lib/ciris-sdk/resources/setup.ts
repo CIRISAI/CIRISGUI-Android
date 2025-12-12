@@ -125,6 +125,41 @@ export interface SetupConfigResponse {
   agent_port: number;
 }
 
+// Model Capabilities for BYOK selection
+export interface ModelCapabilities {
+  tool_use: boolean;
+  structured_output: boolean;
+  vision: boolean;
+  json_mode: boolean;
+  streaming: boolean;
+}
+
+export interface ModelInfo {
+  id?: string;
+  display_name: string;
+  context_window: number;
+  capabilities: ModelCapabilities;
+  tier: string;
+  ciris_compatible: boolean;
+  ciris_recommended: boolean;
+  rejection_reason?: string | null;
+  notes?: string | null;
+}
+
+export interface CirisRequirements {
+  min_context_window: number;
+  required_capabilities: string[];
+}
+
+export interface ProviderModelsResponse {
+  provider_id: string;
+  display_name: string;
+  api_base?: string | null;
+  compatible_models: ModelInfo[];
+  incompatible_models: ModelInfo[];
+  ciris_requirements: CirisRequirements;
+}
+
 /**
  * Setup Resource
  *
@@ -212,6 +247,19 @@ export class SetupResource extends BaseResource {
    */
   async getConfig(): Promise<SetupConfigResponse> {
     return this.transport.get<SetupConfigResponse>("/v1/setup/config");
+  }
+
+  /**
+   * Get models for a specific provider
+   *
+   * Returns CIRIS-compatible and incompatible models for a provider,
+   * sorted by recommendation status and compatibility.
+   *
+   * @param providerId - Provider identifier (e.g., 'openai', 'anthropic')
+   * @returns Provider models with compatibility info
+   */
+  async getProviderModels(providerId: string): Promise<ProviderModelsResponse> {
+    return this.transport.get<ProviderModelsResponse>(`/v1/setup/models/${providerId}`);
   }
 
   /**
