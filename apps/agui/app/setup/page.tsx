@@ -245,7 +245,7 @@ export default function SetupWizard() {
     setLoading(true);
     try {
       // For CIRIS proxy mode (CIRIS Key), use the actual Google ID Token (JWT)
-      // The CIRIS LLM proxy at llm.ciris.ai verifies the JWT with Google's public keys
+      // The CIRIS LLM proxy at proxy1.ciris-services-1.ai verifies the JWT with Google's public keys
       const googleIdToken = localStorage.getItem("ciris_google_id_token") || "";
       const googleUserId = localStorage.getItem("ciris_google_user_id") || "";
 
@@ -268,7 +268,9 @@ export default function SetupWizard() {
       // If we use "openai", the backend only writes the API key and comments out the base URL
       const finalProvider = useCirisProxy ? "other" : selectedProvider;
       const finalApiKey = useCirisProxy ? googleIdToken : apiKey; // Use actual JWT, not google:{userId}
-      const finalBaseUrl = useCirisProxy ? "https://llm.ciris.ai/v1" : apiBase || null;
+      const finalBaseUrl = useCirisProxy
+        ? "https://proxy1.ciris-services-1.ai/v1"
+        : apiBase || null;
       const finalModel = useCirisProxy ? "default" : selectedModel || null;
 
       console.log("[Setup] Final config to send:");
@@ -291,15 +293,20 @@ export default function SetupWizard() {
       console.log("[Setup]   oauthExternalId:", oauthExternalId);
       console.log("[Setup]   oauthEmail:", oauthEmail);
 
+      // For CIRIS proxy mode, automatically configure European backup
+      const backupApiKey = useCirisProxy ? googleIdToken : null;
+      const backupBaseUrl = useCirisProxy ? "https://proxy1.ciris-services-2.ai/v1" : null;
+      const backupModel = useCirisProxy ? "default" : null;
+
       const config: SetupCompleteRequest = {
         llm_provider: finalProvider,
         llm_api_key: finalApiKey,
         llm_base_url: finalBaseUrl,
         llm_model: finalModel,
-        // Backup LLM (not configured in simplified setup)
-        backup_llm_api_key: null,
-        backup_llm_base_url: null,
-        backup_llm_model: null,
+        // Backup LLM - auto-configured for CIRIS proxy (European region)
+        backup_llm_api_key: backupApiKey,
+        backup_llm_base_url: backupBaseUrl,
+        backup_llm_model: backupModel,
         template_id: selectedTemplate || "general",
         enabled_adapters: ["api"], // Default to just API adapter
         adapter_config: {},
@@ -495,7 +502,7 @@ export default function SetupWizard() {
                       setLlmValid(true);
                       const proxyKey = googleUserId ? `google:${googleUserId}` : "";
                       setApiKey(proxyKey);
-                      setApiBase("https://llm.ciris.ai/v1");
+                      setApiBase("https://proxy1.ciris-services-1.ai/v1");
                       setSelectedModel("default");
                       localStorage.setItem("ciris_llm_choice", "ciris_key");
                       setCurrentStep("users");

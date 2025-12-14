@@ -1,5 +1,5 @@
 /**
- * CIRIS Proxy Client for llm.ciris.ai
+ * CIRIS Proxy Client for proxy1.ciris-services-1.ai
  *
  * Uses Google OAuth for authentication with format:
  * Authorization: Bearer google:{google_user_id}
@@ -8,10 +8,10 @@
  * interaction_id are billed as a single interaction.
  */
 
-const PROXY_BASE_URL = 'https://llm.ciris.ai';
+const PROXY_BASE_URL = "https://proxy1.ciris-services-1.ai";
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
+  role: "system" | "user" | "assistant";
   content: string;
 }
 
@@ -98,10 +98,10 @@ export class CIRISProxyClient {
     }
 
     const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': this.getAuthHeader(),
+        "Content-Type": "application/json",
+        Authorization: this.getAuthHeader(),
       },
       body: JSON.stringify(request),
     });
@@ -127,10 +127,10 @@ export class CIRISProxyClient {
     }
 
     const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': this.getAuthHeader(),
+        "Content-Type": "application/json",
+        Authorization: this.getAuthHeader(),
       },
       body: JSON.stringify({
         ...request,
@@ -145,24 +145,24 @@ export class CIRISProxyClient {
 
     const reader = response.body?.getReader();
     if (!reader) {
-      throw new Error('No response body');
+      throw new Error("No response body");
     }
 
     const decoder = new TextDecoder();
-    let buffer = '';
+    let buffer = "";
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
+        if (line.startsWith("data: ")) {
           const data = line.slice(6).trim();
-          if (data === '[DONE]') return;
+          if (data === "[DONE]") return;
           try {
             const chunk = JSON.parse(data) as StreamChunk;
             yield chunk;
@@ -180,7 +180,7 @@ export class CIRISProxyClient {
   async listModels(): Promise<string[]> {
     const response = await fetch(`${this.baseUrl}/v1/models`, {
       headers: {
-        'Authorization': this.getAuthHeader(),
+        Authorization: this.getAuthHeader(),
       },
     });
 
@@ -198,7 +198,7 @@ export class CIRISProxyClient {
   async getCredits(): Promise<{ credits: number; used: number }> {
     const response = await fetch(`${this.baseUrl}/v1/credits`, {
       headers: {
-        'Authorization': this.getAuthHeader(),
+        Authorization: this.getAuthHeader(),
       },
     });
 
